@@ -7,7 +7,6 @@
 
 #include QMK_KEYBOARD_H
 #include "mousekey.h"
-#include "keymap.h"
 #include "keymap_steno.h"
 #include "wait.h"
 
@@ -34,9 +33,9 @@ void 			CLICK_MOUSE(uint8_t);
 // Shift to internal representation
 // i.e) S(teno)R(ight)F
 #define STN(n) (1L<<n)
-enum ORDER { 
+enum ORDER {
 		SFN = 0, SPWR, SST1, SST2, SST3, SST4, SNUML, SNUMR,
-		SLSU, SLSD, SLT, SLK, SLP, SLW, SLH, SLR, SLA, SLO, 
+		SLSU, SLSD, SLT, SLK, SLP, SLW, SLH, SLR, SLA, SLO,
 		SRE, SRU, SRF, SRR, SRP, SRB, SRL, SRG, SRT, SRS, SRD, SRZ, SRES1, SRES2
 };
 

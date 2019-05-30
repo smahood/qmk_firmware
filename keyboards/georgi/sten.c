@@ -4,12 +4,13 @@
 uint32_t cChord 		= 0;		// Current Chord
 int		 chordIndex 	= 0;		// Keys in previousachord
 int32_t  chordState[32];			// Full Chord history
-#define  QWERBUF	24					// Size of chords to buffer for output
+#define  QWERBUF		24			// Size of chords to buffer for output
 
-bool	 repeatFlag = false;		// Should we repeat?
-uint32_t pChord = 0;				// Previous Chord
-uint32_t pChordState[32];			// Previous chord sate
-int		 pChordIndex = 0;			// Keys in previousachord
+bool	 repeatFlag 	= false;	// Should we repeat?
+uint32_t pChord 		= 0;		// Previous Chord
+int		 pChordIndex 	= 0;		// Keys in previousachord
+uint32_t pChordState[32];			// Previous chord sate 
+uint32_t stickyBits = 0;			// Or'd with every incoming press
 
 // Mode state
 enum MODE { STENO = 0, QWERTY, COMMAND };
@@ -22,74 +23,23 @@ enum MODE cMode = STENO;
 #endif
 
 // Command State
-#define MAX_CMD_BUF 20
-uint8_t CMDBUF[MAX_CMD_BUF];
-uint8_t CMDLEN = 0;
+#define MAX_CMD_BUF   20
+uint8_t	 CMDLEN 	= 0;
+uint8_t	 CMDBUF[MAX_CMD_BUF];
 
 // Key Repeat state
-bool     inChord  	= false;
-bool	 repEngaged = false;
-uint16_t repTimer = 0;
+bool     inChord  		= false;
+bool	 repEngaged 	= false;
+uint16_t repTimer 		= 0;
 #define  REP_INIT_DELAY 750
 #define  REP_DELAY 		25
 
 // Mousekeys state
-bool	inMouse = false;
+bool	inMouse 		= false;
 int8_t	mousePress;
 
-
-
-bool halt_chord_processing(void) {
-  // This should be called by by all combinations that should not be treated as chords
-	cChord = 0;
-	inChord = false;
-	chordIndex = 0;
-	clear_keyboard();
-	repEngaged  = false;
-	for (int i = 0; i < 32; i++){
-		chordState[i] = 0xFFFF;
-  }
-  return false;
-}
-
-bool continue_chord_processing(void) {
- 	// Hey that's a steno chord!
-	inChord = false;
-	chordIndex = 0;
-	cChord = 0;
-	return true;
-
-}
-
-
-bool toggle_command_mode(steno_mode_t mode, uint8_t chord[6]) {
-  #ifndef NO_DEBUG
-		uprintf("COMMAND Toggle\n");
-  #endif
-
-  if (cMode != COMMAND) {   // Entering Command Mode
-    CMDLEN = 0;
-    pMode = cMode;
-    cMode = COMMAND;
-  } else {                  // Exiting Command Mode
-    cMode = pMode;
-
-    // Press all and release all
-    for (int i = 0; i < CMDLEN; i++) {
-      register_code(CMDBUF[i]);
-    }
-    clear_keyboard();
-  }
-
-  return halt_chord_processing();
-
-}
-
-
-
-
 // All processing done at chordUp goes through here
-bool send_steno_chord_user(steno_mode_t mode, uint8_t chord[6]) {
+bool send_steno_chord_user(steno_mode_t mode, uint8_t chord[6]) { 
 	// Check for mousekeys, this is release
 #ifdef MOUSEKEY_ENABLE
 	if (inMouse) {
@@ -105,13 +55,30 @@ bool send_steno_chord_user(steno_mode_t mode, uint8_t chord[6]) {
 		uprintf("Fallback Toggle\n");
 #endif
 		QWERSTENO = !QWERSTENO;
-
-		return halt_chord_processing();
+		
+		goto out;
 	}
 
 	// handle command mode
 	if (cChord == (PWR | FN | RD | RZ)) {
-    return toggle_command_mode(mode, chord);
+#ifndef NO_DEBUG
+		uprintf("COMMAND Toggle\n");
+#endif
+		if (cMode != COMMAND) {   // Entering Command Mode
+			CMDLEN = 0;
+			pMode = cMode;
+			cMode = COMMAND;
+		} else {                  // Exiting Command Mode
+			cMode = pMode;
+
+			// Press all and release all
+			for (int i = 0; i < CMDLEN; i++) {
+				register_code(CMDBUF[i]);
+			}
+			clear_keyboard();
+		}
+
+		goto out;
 	}
 
 	// Handle Gaming Toggle,
@@ -120,94 +87,110 @@ bool send_steno_chord_user(steno_mode_t mode, uint8_t chord[6]) {
 		uprintf("Switching to QMK\n");
 #endif
 		layer_on(1);
-		return halt_chord_processing();
+		goto out;
 	}
 
 	// Lone FN press, toggle QWERTY
 #ifndef ONLYQWERTY
 	if (cChord == FN) {
 		(cMode == STENO) ? (cMode = QWERTY) : (cMode = STENO);
-		return halt_chord_processing();
+		goto out;
 	}
 #endif
 
 	// Check for Plover momentary
 	if (cMode == QWERTY && (cChord & FN)) {
 		cChord ^= FN;
-		return continue_chord_processing();
+		goto steno;
 	}
 
 	// Do QWERTY and Momentary QWERTY
 	if (cMode == QWERTY || (cMode == COMMAND) || (cChord & (FN | PWR))) {
 		processChord(false);
-		return halt_chord_processing();
+		goto out;
 	}
 
 	// Fallback NKRO Steno
 	if (cMode == STENO && QWERSTENO) {
 		processChord(true);
-		return halt_chord_processing();
+		goto out;
 	}
 
-  return continue_chord_processing();
+steno:
+	// Hey that's a steno chord!
+	inChord = false;
+	chordIndex = 0;
+	cChord = 0;
+	return true; 
+
+out:
+	cChord = 0;
+	inChord = false;
+	chordIndex = 0;
+	clear_keyboard();
+	repEngaged  = false;
+	for (int i = 0; i < 32; i++)
+		chordState[i] = 0xFFFF;
+
+	return false;
 }
 
-// Update Chord State
-bool process_steno_user(uint16_t keycode, keyrecord_t *record) {
+// Update Chord State 
+bool process_steno_user(uint16_t keycode, keyrecord_t *record) { 
 	// Everything happens in here when steno keys come in.
 	// Bail on keyup
-  if (!record->event.pressed) { return true; }
-  else {
-    repTimer = timer_read();
-  inChord  = true;
+	if (!record->event.pressed) return true;
 
-  // Switch on the press adding to chord
-  switch (keycode) {
-      // Mods and stuff
-      case STN_ST1:			(cChord |= (ST1)); break;
-      case STN_ST2:			(cChord |= (ST2)); break;
-      case STN_ST3:			(cChord |= (ST3)); break;
-      case STN_ST4:			(cChord |= (ST4)); break;
-      case STN_FN:			(cChord |= (FN)) ; break;
-      case STN_PWR:			(cChord |= (PWR)); break;
-      case STN_N1...STN_N6:	(cChord |= (LNO)); break;
-      case STN_N7...STN_NC:	(cChord |= (RNO)); break;
+	// Update key repeat timers
+	repTimer = timer_read();
+	inChord  = true;
 
-      // All the letter keys
-      case STN_S1:			(cChord |= (LSU)) ;  break;
-      case STN_S2:			(cChord |= (LSD)) ;  break;
-      case STN_TL:			(cChord |= (LFT)) ; break;
-      case STN_KL:			(cChord |= (LK)); break;
-      case STN_PL:			(cChord |= (LP)); break;
-      case STN_WL:			(cChord |= (LW)); break;
-      case STN_HL:			(cChord |= (LH)); break;
-      case STN_RL:			(cChord |= (LR)); break;
-      case STN_A:				(cChord |= (LA)); break;
-      case STN_O:				(cChord |= (LO)); break;
-      case STN_E:				(cChord |= (RE)); break;
-      case STN_U:				(cChord |= (RU)); break;
-      case STN_FR:			(cChord |= (RF)); break;
-      case STN_RR:			(cChord |= (RR)); break;
-      case STN_PR:			(cChord |= (RP)); break;
-      case STN_BR:			(cChord |= (RB)); break;
-      case STN_LR:			(cChord |= (RL)); break;
-      case STN_GR:			(cChord |= (RG)); break;
-      case STN_TR:			(cChord |= (RT)); break;
-      case STN_SR:			(cChord |= (RS)); break;
-      case STN_DR:			(cChord |= (RD)); break;
-      case STN_ZR:			(cChord |= (RZ)); break;
-  }
+	// Switch on the press adding to chord
+	bool pr = record->event.pressed;
+	switch (keycode) {
+			// Mods and stuff
+			case STN_ST1:			pr ? (cChord |= (ST1)): (cChord &= ~(ST1)); break;
+			case STN_ST2:			pr ? (cChord |= (ST2)): (cChord &= ~(ST2)); break;
+			case STN_ST3:			pr ? (cChord |= (ST3)): (cChord &= ~(ST3)); break;
+			case STN_ST4:			pr ? (cChord |= (ST4)): (cChord &= ~(ST4)); break;
+			case STN_FN:			pr ? (cChord |= (FN)) : (cChord &= ~(FN)); break;
+			case STN_PWR:			pr ? (cChord |= (PWR)): (cChord &= ~(PWR)); break;
+			case STN_N1...STN_N6:	pr ? (cChord |= (LNO)): (cChord &= ~(LNO)); break;
+			case STN_N7...STN_NC:	pr ? (cChord |= (RNO)): (cChord &= ~(RNO)); break;
+
+			// All the letter keys
+			case STN_S1:			pr ? (cChord |= (LSU)) : (cChord &= ~(LSU));  break;
+			case STN_S2:			pr ? (cChord |= (LSD)) : (cChord &= ~(LSD));  break;
+			case STN_TL:			pr ? (cChord |= (LFT)) : (cChord &= ~(LFT)); break;
+			case STN_KL:			pr ? (cChord |= (LK)) : (cChord &= ~(LK)); break;
+			case STN_PL:			pr ? (cChord |= (LP)) : (cChord &= ~(LP)); break;
+			case STN_WL:			pr ? (cChord |= (LW)) : (cChord &= ~(LW)); break;
+			case STN_HL:			pr ? (cChord |= (LH)) : (cChord &= ~(LH)); break;
+			case STN_RL:			pr ? (cChord |= (LR)) : (cChord &= ~(LR)); break;
+			case STN_A:				pr ? (cChord |= (LA)) : (cChord &= ~(LA)); break;
+			case STN_O:				pr ? (cChord |= (LO)) : (cChord &= ~(LO)); break;
+			case STN_E:				pr ? (cChord |= (RE)) : (cChord &= ~(RE)); break;
+			case STN_U:				pr ? (cChord |= (RU)) : (cChord &= ~(RU)); break;
+			case STN_FR:			pr ? (cChord |= (RF)) : (cChord &= ~(RF)); break;
+			case STN_RR:			pr ? (cChord |= (RR)) : (cChord &= ~(RR)); break;
+			case STN_PR:			pr ? (cChord |= (RP)) : (cChord &= ~(RP)); break;
+			case STN_BR:			pr ? (cChord |= (RB)) : (cChord &= ~(RB)); break;
+			case STN_LR:			pr ? (cChord |= (RL)) : (cChord &= ~(RL)); break;
+			case STN_GR:			pr ? (cChord |= (RG)) : (cChord &= ~(RG)); break;
+			case STN_TR:			pr ? (cChord |= (RT)) : (cChord &= ~(RT)); break;
+			case STN_SR:			pr ? (cChord |= (RS)) : (cChord &= ~(RS)); break;
+			case STN_DR:			pr ? (cChord |= (RD)) : (cChord &= ~(RD)); break;
+			case STN_ZR:			pr ? (cChord |= (RZ)) : (cChord &= ~(RZ)); break;
+	}
 
 	// Store previous state for fastQWER
-	chordState[chordIndex] = cChord;
-	chordIndex++;
+	if (pr) {
+		chordState[chordIndex] = cChord; 
+		chordIndex++;
+	}
 
-	return true;
-  }
+	return true; 
 }
-
-
-
 void matrix_scan_user(void) {
 	// We abuse this for early sending of key
 	// Key repeat only on QWER/SYMB layers
@@ -231,8 +214,8 @@ void matrix_scan_user(void) {
 #endif
 };
 
-// Helpers
-uint32_t processFakeSteno(bool lookup) {
+// For Plover NKRO
+uint32_t processFakeSteno(bool lookup) { 
 	P( LSU,				SEND(KC_Q););
 	P( LSD,				SEND(KC_A););
 	P( LFT,				SEND(KC_W););
@@ -264,42 +247,19 @@ uint32_t processFakeSteno(bool lookup) {
 
 	return 0;
 }
-void clickMouse(uint8_t kc) {
-#ifdef MOUSEKEY_ENABLE
-	mousekey_on(kc);
-	mousekey_send();
-
-	// Store state for later use
-	inMouse = true;
-	mousePress = kc;
-#endif
-}
-void SEND(uint8_t kc) {
-	// Send Keycode, Does not work for Quantum Codes
-	if (cMode == COMMAND && CMDLEN < MAX_CMD_BUF) {
-#ifndef NO_DEBUG
-		uprintf("CMD LEN: %d BUF: %d\n", CMDLEN, MAX_CMD_BUF);
-#endif
-		CMDBUF[CMDLEN] = kc;
-		CMDLEN++;
-	}
-
-	if (cMode != COMMAND) register_code(kc);
-	return;
-}
-void REPEAT(void) {
-	if (cMode != QWERTY)
-		return;
-
-	repeatFlag = true;
-	return;
-}
 
 // Traverse the chord history to a given point
 // Returns the mask to use
 void processChord(bool useFakeSteno) {
 	// Save the clean chord state
 	uint32_t savedChord = cChord;
+
+	// Apply Stick Bits if needed
+	if (stickyBits != 0) {
+		cChord |= stickyBits;
+		for (int i = 0; i <= chordIndex; i++)
+			chordState[i] |= stickyBits;
+	}
 
 	// Strip FN
 	if (cChord & FN) cChord ^= FN;
@@ -322,7 +282,7 @@ void processChord(bool useFakeSteno) {
 		return;
 	}
 
-	// Iterate through chord picking out the individual
+	// Iterate through chord picking out the individual 
 	// and longest chords
 	uint32_t bufChords[QWERBUF];
 	int 	 bufLen		= 0;
@@ -356,12 +316,12 @@ void processChord(bool useFakeSteno) {
 			} else {
 				test = processQwerty(true);
 			}
-
+		 
 			if (test != 0) {
 				longestChord = test;
 			}
 		}
-
+		
 		mask |= longestChord;
 		bufChords[bufLen] = longestChord;
 		bufLen++;
@@ -371,7 +331,7 @@ void processChord(bool useFakeSteno) {
 			return;
 		}
 	}
-
+	
 	// Now that the buffer is populated, we run it
 	for (int i = 0; i < bufLen ; i++) {
 		cChord = bufChords[i];
@@ -383,7 +343,7 @@ void processChord(bool useFakeSteno) {
 	}
 
 	// Save state in case of repeat
-	if (!repeatFlag) {
+	if (!repeatFlag) {			
 		saveState(savedChord);
 	}
 
@@ -395,12 +355,52 @@ void processChord(bool useFakeSteno) {
 void saveState(uint32_t cleanChord) {
 	pChord = cleanChord;
 	pChordIndex = chordIndex;
-	for (int i = 0; i < 32; i++)
+	for (int i = 0; i < 32; i++) 
 		pChordState[i] = chordState[i];
 }
 void restoreState() {
 	cChord = pChord;
 	chordIndex = pChordIndex;
-	for (int i = 0; i < 32; i++)
+	for (int i = 0; i < 32; i++) 
 		chordState[i] = pChordState[i];
+}
+
+// Macros for calling from keymap.c
+void SEND(uint8_t kc) {
+	// Send Keycode, Does not work for Quantum Codes
+	if (cMode == COMMAND && CMDLEN < MAX_CMD_BUF) {
+#ifndef NO_DEBUG
+		uprintf("CMD LEN: %d BUF: %d\n", CMDLEN, MAX_CMD_BUF);
+#endif
+		CMDBUF[CMDLEN] = kc;
+		CMDLEN++;
+	} 
+
+	if (cMode != COMMAND) register_code(kc);
+	return;
+}
+void REPEAT(void) {
+	if (cMode != QWERTY)
+		return;
+
+	repeatFlag = true;
+	return;
+}
+void SET_STICKY(uint32_t stick) {
+	stickyBits = stick;
+	return;
+}
+void SWITCH_LAYER(int layer) {
+	if (keymapsCount >= layer) 
+		layer_on(layer);
+}
+void CLICK_MOUSE(uint8_t kc) {
+#ifdef MOUSEKEY_ENABLE
+	mousekey_on(kc);
+	mousekey_send();
+
+	// Store state for later use
+	inMouse = true;
+	mousePress = kc;
+#endif
 }

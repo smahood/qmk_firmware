@@ -5,6 +5,7 @@
 #----------------------------------------------------------------------------
 # Source includes
 SRC += matrix.c i2c_master.c
+# sten.c
 
 # Hardware info
 MCU = atmega32u4
@@ -15,8 +16,9 @@ F_USB = $(F_CPU)
 EXTRAFLAGS += -flto
 
 CUSTOM_MATRIX 		= yes
+MOUSEKEY_ENABLE		= no
 STENO_ENABLE 		= yes
 EXTRAKEY_ENABLE     = yes
-CONSOLE_ENABLE      = no
+CONSOLE_ENABLE      = yes
 COMMAND_ENABLE      = no
 NKRO_ENABLE			= yes
