@@ -77,7 +77,6 @@ void s_chords(void) {
     f_code(KC_V, LSU | LR);
     f_code(KC_SPC, LSU | RP);
     f_code(KC_S, LSU);
-
     f_code(KC_Z, (LSD | LFT | LK | LP | LW));
     f_code(KC_J, LSD | LK | LW | LR);
     f_code(KC_V, LSD | LR);
@@ -117,6 +116,18 @@ void e_chords(void) {
     f_code(KC_E, RE);
 }
 
+void p_right_chords(void) {
+    f_code(KC_N, RP | RB);
+    f_code(KC_P, RP);
+}
+
+void asterisk_chords(void){
+  f_code(KC_BSPC, ST1);
+  f_code(KC_BSPC, ST2);
+  f_code(KC_BSPC, ST3);
+  f_code(KC_BSPC, ST4);
+}
+
 bool process_fingerspelling(uint32_t bitmask, bool pressed) {
     if (pressed) {
         f_chord = f_chord | bitmask;
@@ -135,7 +146,7 @@ bool process_fingerspelling(uint32_t bitmask, bool pressed) {
         f_code(KC_U, RU);
         f_code(KC_F, RF);
         f_code(KC_R, RR);
-        f_code(KC_P, RP);
+        p_right_chords();
         f_code(KC_B, RB);
         f_code(KC_L, RL);
         f_code(KC_G, RG);
