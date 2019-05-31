@@ -13,6 +13,7 @@
 *.map
 *.sym
 *.swp
+/*.hex
 tags
 *~
 build/
