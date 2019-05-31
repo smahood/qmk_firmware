@@ -6,29 +6,10 @@
 // Amen.
 
 #include QMK_KEYBOARD_H
-#include "mousekey.h"
 #include "keymap_steno.h"
-#include "wait.h"
-
-extern size_t keymapsCount;			// Total keymaps
-extern uint32_t cChord;				// Current Chord
-
-// Function defs
-void 			processChord(bool useFakeSteno);
-uint32_t		processQwerty(bool lookup);
-uint32_t 		processFakeSteno(bool lookup);
-void 			saveState(uint32_t cChord);
-void 			restoreState(void);
 
 // Macros for use in keymap.c
-void 			SEND(uint8_t kc);
-void 			REPEAT(void);
-void 			SET_STICKY(uint32_t);
-void 			SWITCH_LAYER(int);
-void 			CLICK_MOUSE(uint8_t);
-
-// Keymap helper
-#define P(chord, act) if (cChord == (chord)) { if (!lookup) {act;} return chord;}
+void 			SEND(uint32_t kc);
 
 // Shift to internal representation
 // i.e) S(teno)R(ight)F
