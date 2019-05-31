@@ -71,36 +71,14 @@ void f_code(uint32_t kc, uint32_t bitmask) {
 
 void number_code(uint32_t kc, uint32_t bitmask) {
     if ((f_chord & bitmask) == bitmask) {
-        SEND(kc);
-        f_chord = f_chord & ~bitmask;
+      SEND(kc);
+      f_chord = f_chord & ~bitmask;
       }
 }
 
-void shifted_number_code(uint32_t kc, uint32_t bitmask) {
-  if ((f_chord & bitmask) == bitmask) {
-        register_code(KC_LSFT);
-        SEND(kc);
-        unregister_code(KC_LSFT);
-        f_chord = f_chord & ~bitmask;
-      }
-
-}
 
 void number_chords(void){
-  if ((f_chord & RNO) > 0) {
-    number_code(KC_0, RD);
-    number_code(KC_9, RT);
-    number_code(KC_8, RL);
-    number_code(KC_7, RP);
-    number_code(KC_6, RF);
-    number_code(KC_5, ST1);
-    number_code(KC_5, ST1);
-    number_code(KC_4, LH);
-    number_code(KC_3, LP);
-    number_code(KC_2, LFT);
-    number_code(KC_1, LSU);
-    }
-  else if ((f_chord & LNO) > 0) {
+  if ((f_chord & LNO) > 0) {
     number_code(KC_1, LSU);
     number_code(KC_2, LFT);
     number_code(KC_3, LP);
@@ -115,20 +93,6 @@ void number_chords(void){
     }
   }
 
-void symbol_chords(void){
-  if ((f_chord & LNO) > 0) {
-    shifted_number_code(KC_1, LSD);
-    shifted_number_code(KC_2, LK);
-    shifted_number_code(KC_3, LW);
-    shifted_number_code(KC_4, LR);
-    shifted_number_code(KC_5, ST2);
-    shifted_number_code(KC_6, RR);
-    shifted_number_code(KC_7, RB);
-    shifted_number_code(KC_8, RG);
-    shifted_number_code(KC_9, RS);
-    shifted_number_code(KC_0, RZ);
-    }
-  }
 
 
 void s_chords(void) {
@@ -191,7 +155,6 @@ bool process_fingerspelling(uint32_t bitmask, bool pressed) {
         f_chord = f_chord | bitmask;
     } else if ((f_chord & bitmask) > 0) {
         number_chords();
-        symbol_chords();
         asterisk_chords();
         s_chords();
         t_chords();
@@ -307,9 +270,9 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
                               STN_A,   STN_O,  STN_N1,       STN_N7,  STN_E,   STN_U
     ),
     [FINGERSPELLING_LAYER] = LAYOUT_georgi(
-    TO(STENO_LAYER), F_SU, F_TL, F_PL, F_HL, F_ST1,            F_ST3, F_FR, F_PR, F_LR, F_TR, F_DR,
-    F_PWR,           F_SD, F_KL, F_WL, F_RL, F_ST2,            F_ST4, F_RR, F_BR, F_GR, F_SR, F_ZR,
-                                        F_A, F_O,   F_NL,      F_NR,  F_E,  F_U
+    TO(STENO_LAYER), F_SU, F_TL, F_PL, F_HL, F_ST1,            F_ST3,   F_FR, F_PR, F_LR, F_TR, F_DR,
+    F_PWR,           F_SD, F_KL, F_WL, F_RL, F_ST2,            F_ST4,   F_RR, F_BR, F_GR, F_SR, F_ZR,
+                                 F_A,  F_O,  F_NL,             KC_LSFT, F_E,  F_U
     )
 };
 
