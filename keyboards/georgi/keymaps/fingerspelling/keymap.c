@@ -12,16 +12,18 @@
 
 
 #include QMK_KEYBOARD_H
-#include "keymap_fingerspelling.h"
+#include "fingerspelling.h"
 #define IGNORE_MOD_TAP_INTERRUPT
+
+uint32_t f_chord = 0;                // Fingerspelling Chord
+uint8_t current_mods = NOMODS;
+
 
 enum custom_keycodes {
 PLACEHOLDER = SAFE_RANGE,  F_FN, F_PWR,
     F_SU, F_SD, F_TL, F_KL, F_PL,  F_WL, F_HL, F_RL, F_A, F_O,
     F_ST1, F_ST2, F_ST3, F_ST4, F_NL, F_NR,
     F_E, F_U, F_FR, F_RR, F_PR, F_BR, F_LR, F_GR, F_TR, F_SR, F_DR, F_ZR};
-
-uint32_t f_chord = 0;                // Fingerspelling Chord
 
 
 void SEND(uint32_t kc) {
@@ -48,6 +50,27 @@ void SEND_CTRLED(uint8_t kc) {
 }
 
 
+uint8_t get_current_mods(void) {
+    uint8_t mods = NOMODS;
+    if (keyboard_report->mods & MOD_BIT(KC_LCTRL)) { mods = mods | CTRL; }
+    if (keyboard_report->mods & MOD_BIT(KC_LSHIFT)) { mods = mods | SHFT; }
+    return mods;
+}
+
+
+void compare_and_set_mods (uint8_t mods1, uint8_t mods2) {
+        if ((mods1 & SUPER) > (mods2 & SUPER)) {unregister_code(KC_LWIN);}
+        if ((mods1 & SUPER) < (mods2 & SUPER)) {register_code(KC_LWIN);}
+        if ((mods1 & ALT) > (mods2 & ALT)) {unregister_code(KC_LALT);}
+        if ((mods1 & ALT) < (mods2 & ALT)) {register_code(KC_LALT);}
+        if ((mods1 & CTRL) > (mods2 & CTRL)) {unregister_code(KC_LCTL);}
+        if ((mods1 & CTRL) < (mods2 & CTRL)) {register_code(KC_LCTL);}
+        if ((mods1 & SHFT) > (mods2 & SHFT)) {unregister_code(KC_LSFT);}
+        if ((mods1 & SHFT) < (mods2 & SHFT)) {register_code(KC_LSFT);}
+}
+
+
+
 
 void SEND_CTRL_SHIFTED(uint8_t kc) {
     bool curr_ctrled = (keyboard_report->mods & MOD_BIT(KC_LCTRL));
@@ -62,11 +85,91 @@ void SEND_CTRL_SHIFTED(uint8_t kc) {
     if (!curr_shifted) { unregister_code(KC_LSFT); }
 }
 
-void f_code(uint32_t kc, uint32_t bitmask) {
-    if ((f_chord & bitmask) == bitmask) {
-        SEND(kc);
-        f_chord = f_chord & ~bitmask;
-      }
+
+void symbol_code(uint32_t kc, uint8_t mods, uint32_t bitmask) {
+    uint8_t starting_mods = current_mods;
+  if ((f_chord & bitmask) == bitmask) {
+    compare_and_set_mods(starting_mods, mods);
+    SEND(kc);
+    compare_and_set_mods(mods, starting_mods);
+
+    f_chord = 0;
+    }
+}
+
+void symbol_code_2(uint32_t kc1, uint32_t kc2, uint8_t mods1, uint8_t mods2, uint32_t bitmask) {
+  uint8_t starting_mods = current_mods;
+  if ((f_chord & bitmask) == bitmask) {
+    compare_and_set_mods(starting_mods, mods1);
+    SEND(kc1);
+    compare_and_set_mods(mods1, mods2);
+    SEND(kc2);
+    compare_and_set_mods(mods2, starting_mods);
+
+    f_chord = 0;
+    }
+}
+
+
+void symbol_code_3(uint32_t kc1, uint32_t kc2, uint32_t kc3, uint8_t mods1, uint8_t mods2, uint8_t mods3, uint32_t bitmask) {
+  uint8_t starting_mods = current_mods;
+  if ((f_chord & bitmask) == bitmask) {
+    compare_and_set_mods(starting_mods, mods1);
+    SEND(kc1);
+    compare_and_set_mods(mods1, mods2);
+    SEND(kc2);
+    compare_and_set_mods(mods2, mods3);
+    SEND(kc3);
+    compare_and_set_mods(mods3, starting_mods);
+
+    f_chord = 0;
+    }
+}
+
+
+void symbol_chords(void) {
+  // Uses right hand combinations that are rarely or never seen in English words
+
+  uint32_t FPL = RF | RP | RL;
+  uint32_t PLT = RP | RL | RT;
+  uint32_t FPLT = RF | RP | RL | RT;
+  uint32_t PLTD = RP | RL | RT | RD;
+
+  // uint32_t RBG = RR | RB | RG;
+  // uint32_t BGS = RB | RG | RS;
+  // uint32_t RBGS = RR | RB | RG | RS;
+  // uint32_t BGSZ = RB | RG | RS | RZ;
+
+  if ((f_chord & FPLT) > 0) {
+    symbol_code(KC_LBRC, CTRL | SHFT, FPLT | RE | RU);
+    symbol_code(KC_LBRC, SHFT, FPLT | RE);
+    symbol_code(KC_RBRC, SHFT, FPLT | RU);
+
+  }
+
+  if ((f_chord & FPL) > 0) {
+    symbol_code(KC_9, CTRL | SHFT, FPL | RE | RU);
+    symbol_code(KC_9, SHFT, FPL | RE);
+    symbol_code(KC_0, SHFT, FPL | RU);
+  }
+
+  if ((f_chord & PLTD) > 0) {
+    symbol_code_2(KC_MINS, KC_COMM, NOMODS, SHFT, PLTD | LFT | LP);
+    symbol_code_2(KC_MINS, KC_DOT, NOMODS, SHFT, PLTD | LP | LH);
+
+
+    symbol_code_2(KC_COMM, KC_DOT, SHFT, SHFT, PLTD | RE | RU);
+    symbol_code(KC_COMM, SHFT, PLTD | RE);
+    symbol_code(KC_DOT, SHFT, PLTD | RU);
+  }
+
+  if ((f_chord & PLT) > 0) {
+
+    symbol_code(KC_LBRC, CTRL, PLT | RE | RU);
+    symbol_code(KC_LBRC, NOMODS, PLT | RE);
+    symbol_code(KC_RBRC, NOMODS, PLT | RU);
+  }
+
 }
 
 void number_code(uint32_t kc, uint32_t bitmask) {
@@ -95,136 +198,164 @@ void number_chords(void){
 
 
 
-void s_chords(void) {
-    f_code(KC_Z, (LSU | LFT | LK | LP | LW));
-    f_code(KC_J, LSU | LK | LW | LR);
-    f_code(KC_V, LSU | LR);
-    f_code(KC_SPC, LSU | RP);
-    f_code(KC_S, LSU);
-    f_code(KC_Z, (LSD | LFT | LK | LP | LW));
-    f_code(KC_J, LSD | LK | LW | LR);
-    f_code(KC_V, LSD | LR);
-    f_code(KC_SPC, LSD | RP);
-    f_code(KC_S, LSD);
+void f_code(uint32_t kc, uint32_t bitmask) {
+    if ((f_chord & bitmask) == bitmask) {
+        SEND(kc);
+        f_chord = f_chord & ~bitmask;
+      }
 }
 
-void t_chords(void) {
-    f_code(KC_G, LFT | LK | LP | LW);
-    f_code(KC_N, LFT | LP | LH);
-    f_code(KC_D, LFT | LK);
-    f_code(KC_F, LFT | LP);
-    f_code(KC_T, LFT);
-}
-
-void k_chords(void) {
-    f_code(KC_Y, LK | LW | LR);
-    f_code(KC_X, LK | LP);
-    f_code(KC_Q, LK | LW);
-    f_code(KC_C, LK | LR);
-    f_code(KC_K, LK);
-}
-
-void p_chords(void) {
-    f_code(KC_B, LP | LW);
-    f_code(KC_M, LP | LH);
-    f_code(KC_P, LP);
-}
-
-void h_chords(void) {
-    f_code(KC_L, LH | LR);
-    f_code(KC_H, LH);
-}
-
-void e_chords(void) {
-    f_code(KC_I, RE | RU);
-    f_code(KC_E, RE);
-}
-
-void p_right_chords(void) {
-    f_code(KC_N, RP | RB);
-    f_code(KC_P, RP);
-}
 
 void asterisk_chords(void){
   f_code(KC_BSPC, ST3);
 }
 
+void fingerspelling_chords(void){
+  // This fuction checks for all the standard fingerspelling rules in Steno Order
+  // The chords will combine together based on non-conflicting rules
+  // So `snowballs` could be stroked `SPHO/W-B/A-L/-LS`
+  // The only active chord on the right side is `-PB` to write `n`
 
-bool process_fingerspelling(uint32_t bitmask, bool pressed) {
-    if (pressed) {
+  // Start with S-
+  f_code(KC_Z, (LSU | LFT | LK | LP | LW));
+  f_code(KC_J, LSU | LK | LW | LR);
+  f_code(KC_V, LSU | LR);
+  f_code(KC_S, LSU);
+  f_code(KC_Z, (LSD | LFT | LK | LP | LW));
+  f_code(KC_J, LSD | LK | LW | LR);
+  f_code(KC_V, LSD | LR);
+  f_code(KC_S, LSD);
+
+  // Start with T-
+  f_code(KC_G, LFT | LK | LP | LW);
+  f_code(KC_N, LFT | LP | LH);
+  f_code(KC_D, LFT | LK);
+  f_code(KC_F, LFT | LP);
+  f_code(KC_T, LFT);
+
+  // Start with K
+  f_code(KC_Y, LK | LW | LR);
+  f_code(KC_X, LK | LP);
+  f_code(KC_Q, LK | LW);
+  f_code(KC_C, LK | LR);
+  f_code(KC_K, LK);
+
+  // Start with P-
+  f_code(KC_B, LP | LW);
+  f_code(KC_M, LP | LH);
+  f_code(KC_P, LP);
+
+  // Start with W
+  f_code(KC_W, LW);
+
+  // Start with H
+  f_code(KC_L, LH | LR);
+  f_code(KC_H, LH);
+
+  // Start with R-
+  f_code(KC_R, LR);
+
+  // Start with A
+  f_code(KC_A, LA);
+
+  // Start with O
+  f_code(KC_O, LO);
+
+  // Start with E
+  f_code(KC_I, RE | RU);
+  f_code(KC_E, RE);
+
+  // Start with U
+  f_code(KC_U, RU);
+
+  // Start with F
+  f_code(KC_F, RF);
+
+  // Start with -R
+  f_code(KC_R, RR);
+
+  // Start with -P
+  f_code(KC_N, RP | RB);
+  f_code(KC_P, RP);
+
+  // Start with B
+  f_code(KC_B, RB);
+
+  // Start with L
+  f_code(KC_L, RL);
+
+  // Start with G
+  f_code(KC_G, RG);
+
+  // Start with -T
+  f_code(KC_T, RT);
+
+  // Start with -S
+  f_code(KC_S, RS);
+
+  // Start with -D
+  f_code(KC_D, RD);
+
+  // Start with -Z
+  f_code(KC_Z, RZ);
+}
+
+
+bool process_fingerspelling(uint32_t bitmask, keyrecord_t *record) {
+    if (record->event.pressed) {
         f_chord = f_chord | bitmask;
     } else if ((f_chord & bitmask) > 0) {
-        number_chords();
-        asterisk_chords();
-        s_chords();
-        t_chords();
-        k_chords();
-        p_chords();
-        f_code(KC_W, LW);
-        h_chords();
-        f_code(KC_H, LH);
-        f_code(KC_R, LR);
-        f_code(KC_A, LA);
-        f_code(KC_O, LO);
-        e_chords();
-        f_code(KC_U, RU);
-        f_code(KC_F, RF);
-        f_code(KC_R, RR);
-        p_right_chords();
-        f_code(KC_B, RB);
-        f_code(KC_L, RL);
-        f_code(KC_G, RG);
-        f_code(KC_T, RT);
-        f_code(KC_S, RS);
-        f_code(KC_D, RD);
-        f_code(KC_Z, RZ);
+      current_mods = get_current_mods();
+      number_chords();
+      symbol_chords();
+      asterisk_chords();
+      fingerspelling_chords();
     }
     return true;
 }
-
 
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
    switch (keycode) {
             case F_FN: break;
             case F_PWR: break;
-            case F_SU: return process_fingerspelling(LSU, record->event.pressed);
-            case F_SD: return process_fingerspelling(LSD, record->event.pressed);
-            case F_TL: return process_fingerspelling(LFT, record->event.pressed);
-            case F_KL: return process_fingerspelling(LK,  record->event.pressed);
-            case F_PL: return process_fingerspelling(LP,  record->event.pressed);
-            case F_WL: return process_fingerspelling(LW,  record->event.pressed);
-            case F_HL: return process_fingerspelling(LH,  record->event.pressed);
-            case F_RL: return process_fingerspelling(LR,  record->event.pressed);
-            case F_A: return process_fingerspelling(LA,  record->event.pressed);
-            case F_O: return process_fingerspelling(LO,  record->event.pressed);
+            case F_SU: return process_fingerspelling(LSU, record);
+            case F_SD: return process_fingerspelling(LSD, record);
+            case F_TL: return process_fingerspelling(LFT, record);
+            case F_KL: return process_fingerspelling(LK,  record);
+            case F_PL: return process_fingerspelling(LP,  record);
+            case F_WL: return process_fingerspelling(LW,  record);
+            case F_HL: return process_fingerspelling(LH,  record);
+            case F_RL: return process_fingerspelling(LR,  record);
+            case F_A: return process_fingerspelling(LA,  record);
+            case F_O: return process_fingerspelling(LO,  record);
 
             case F_NL: if (record->event.pressed) { f_chord = f_chord | LNO; }
-                       else  { process_fingerspelling(LNO,  record->event.pressed);
+                       else  { process_fingerspelling(LNO, record);
                               f_chord = f_chord & ~LNO; };
                        return true;
             case F_NR: if (record->event.pressed) { f_chord = f_chord | RNO; }
-                       else  { process_fingerspelling(RNO,  record->event.pressed);
+                       else  { process_fingerspelling(RNO, record);
                               f_chord = f_chord & ~RNO; };
                        return true;
-            case F_ST1: return process_fingerspelling(ST1,  record->event.pressed);
-            case F_ST2: return process_fingerspelling(ST2,  record->event.pressed);
-            case F_ST3: return process_fingerspelling(ST3,  record->event.pressed);
-            case F_ST4: return process_fingerspelling(ST4,  record->event.pressed);
+            case F_ST1: return process_fingerspelling(ST1, record);
+            case F_ST2: return process_fingerspelling(ST2, record);
+            case F_ST3: return process_fingerspelling(ST3, record);
+            case F_ST4: return process_fingerspelling(ST4, record);
             // case F_NL: return process_fingerspelling(LK,  record->event.pressed);
             // case F_NR: return process_fingerspelling(LK,  record->event.pressed);
-            case F_E: return process_fingerspelling(RE,  record->event.pressed);
-            case F_U: return process_fingerspelling(RU,  record->event.pressed);
-            case F_FR: return process_fingerspelling(RF,  record->event.pressed);
-            case F_RR: return process_fingerspelling(RR,  record->event.pressed);
-            case F_PR: return process_fingerspelling(RP,  record->event.pressed);
-            case F_BR: return process_fingerspelling(RB,  record->event.pressed);
-            case F_LR: return process_fingerspelling(RL,  record->event.pressed);
-            case F_GR: return process_fingerspelling(RG,  record->event.pressed);
-            case F_TR: return process_fingerspelling(RT,  record->event.pressed);
-            case F_SR: return process_fingerspelling(RS,  record->event.pressed);
-            case F_DR: return process_fingerspelling(RD,  record->event.pressed);
-            case F_ZR: return process_fingerspelling(RZ,  record->event.pressed);
+            case F_E: return process_fingerspelling(RE, record);
+            case F_U: return process_fingerspelling(RU, record);
+            case F_FR: return process_fingerspelling(RF, record);
+            case F_RR: return process_fingerspelling(RR, record);
+            case F_PR: return process_fingerspelling(RP, record);
+            case F_BR: return process_fingerspelling(RB, record);
+            case F_LR: return process_fingerspelling(RL, record);
+            case F_GR: return process_fingerspelling(RG, record);
+            case F_TR: return process_fingerspelling(RT, record);
+            case F_SR: return process_fingerspelling(RS, record);
+            case F_DR: return process_fingerspelling(RD, record);
+            case F_ZR: return process_fingerspelling(RZ, record);
         }
     return true;
 }
@@ -244,7 +375,7 @@ void matrix_scan_user(void) {
 
 // QMK Layers
 #define STENO_LAYER   0
-#define FINGERSPELLING_LAYER   1
+#define F_LAYER   1
 
 /* Keyboard Layout
  * ,---------------------------------.    ,------------------------------.
@@ -257,82 +388,19 @@ void matrix_scan_user(void) {
  *                   `---------------'    `---------------'
  */
 
-
-
-
-
-
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     // Main layer, everything goes through here
     [STENO_LAYER] = LAYOUT_georgi(
-    TO(FINGERSPELLING_LAYER), STN_S1,  STN_TL,  STN_PL,  STN_HL,  STN_ST1,       STN_ST3, STN_FR,  STN_PR,  STN_LR,  STN_TR,  STN_DR,
-                              STN_PWR, STN_S2,  STN_KL,  STN_WL,  STN_RL,  STN_ST2,       STN_ST4, STN_RR,  STN_BR,  STN_GR,  STN_SR,  STN_ZR,
-                              STN_A,   STN_O,  STN_N1,       STN_N7,  STN_E,   STN_U
+    TO(F_LAYER), STN_S1,  STN_TL,  STN_PL,  STN_HL,  STN_ST1,       STN_ST3, STN_FR,  STN_PR,  STN_LR,  STN_TR,  STN_DR,
+    STN_PWR,  STN_S2,  STN_KL,  STN_WL,  STN_RL,  STN_ST2,       STN_ST4, STN_RR,  STN_BR,  STN_GR,  STN_SR,  STN_ZR,
+    STN_A,   STN_O,  STN_N1,       STN_N7,  STN_E,   STN_U
     ),
-    [FINGERSPELLING_LAYER] = LAYOUT_georgi(
+    [F_LAYER] = LAYOUT_georgi(
     TO(STENO_LAYER), F_SU, F_TL, F_PL, F_HL, F_ST1,            F_ST3,   F_FR, F_PR, F_LR, F_TR, F_DR,
     F_PWR,           F_SD, F_KL, F_WL, F_RL, F_ST2,            F_ST4,   F_RR, F_BR, F_GR, F_SR, F_ZR,
                                  F_A,  F_O,  F_NL,             KC_LSFT, F_E,  F_U
     )
 };
-
-
-
-    // P(LSU | LFT | LK | LP | LW,             SEND(KC_Z));
-    // P(LSD | LFT | LK | LP | LW,             SEND(KC_Z));
-
-    // P(LSU | LK | LW | LR,                   SEND(KC_J));
-    // P(LSD | LK | LW | LR,                   SEND(KC_J));
-
-    // P(LSU | LR,                             SEND(KC_V));
-    // P(LSD | LR,                             SEND(KC_V));
-    // P(LSU | RP,                             SEND(KC_SPC));
-    // P(LSD | RP,                             SEND(KC_SPC));
-
-    // P(LSU,                                  SEND(KC_S));
-    // P(LSD,                                  SEND(KC_S));
-
-    // P(LFT | LK | LP | LW,                   SEND(KC_G));
-    // P(LFT | LP | LH,                        SEND(KC_N));
-    // P(LFT | LK,                             SEND(KC_D));
-    // P(LFT | LP,                             SEND(KC_F));
-    // P(LFT,                                  SEND(KC_T));
-
-
-    // P(LK | LW | LR,                         SEND(KC_Y));
-    // P(LK | LP,                              SEND(KC_X));
-    // P(LK | LW ,                             SEND(KC_Q));
-    // P(LK | LR ,                             SEND(KC_C));
-
-
-
-    // P(LP | LW ,                             SEND(KC_B));
-    // P(LP | LH ,                             SEND(KC_M));
-    // P(LP,                                   SEND(KC_P));
-
-    // P(LW,                                   SEND(KC_W));
-
-    // P(LH | LR ,                             SEND(KC_L));
-    // P(LH,                                   SEND(KC_H));
-
-    // P(LR,                                   SEND(KC_R));
-
-    // P(LA,                                   SEND(KC_A));
-
-    // P(LO,                                   SEND(KC_O));
-
-    // P(RE | RU,                              SEND(KC_I));
-    // P(RE,                                   SEND(KC_E));
-    // P(RU,                                   SEND(KC_U));
-
-
-
-
-
-
-    // P(LK,                  SEND(KC_K));
-
-
 
 
     // P(RP | RL | RB | RG,   SEND_SHIFTED(KC_8));

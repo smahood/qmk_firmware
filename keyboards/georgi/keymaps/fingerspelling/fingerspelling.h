@@ -8,8 +8,11 @@
 #include QMK_KEYBOARD_H
 #include "keymap_steno.h"
 
-// Macros for use in keymap.c
-void 			SEND(uint32_t kc);
+#define NOMODS 0L
+#define SHFT  (1L<<0)
+#define CTRL  (1L<<1)
+#define ALT   (1L<<2)
+#define SUPER (1L<<3)
 
 // Shift to internal representation
 // i.e) S(teno)R(ight)F
