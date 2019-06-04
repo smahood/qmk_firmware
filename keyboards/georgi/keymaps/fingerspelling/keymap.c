@@ -16,6 +16,7 @@
 #define IGNORE_MOD_TAP_INTERRUPT
 
 uint32_t f_chord = 0;                // Fingerspelling Chord
+
 uint8_t current_mods = NOMODS;
 
 
@@ -59,14 +60,14 @@ uint8_t get_current_mods(void) {
 
 
 void compare_and_set_mods (uint8_t mods1, uint8_t mods2) {
-        if ((mods1 & SUPER) > (mods2 & SUPER)) {unregister_code(KC_LWIN);}
-        if ((mods1 & SUPER) < (mods2 & SUPER)) {register_code(KC_LWIN);}
-        if ((mods1 & ALT) > (mods2 & ALT)) {unregister_code(KC_LALT);}
-        if ((mods1 & ALT) < (mods2 & ALT)) {register_code(KC_LALT);}
-        if ((mods1 & CTRL) > (mods2 & CTRL)) {unregister_code(KC_LCTL);}
-        if ((mods1 & CTRL) < (mods2 & CTRL)) {register_code(KC_LCTL);}
-        if ((mods1 & SHFT) > (mods2 & SHFT)) {unregister_code(KC_LSFT);}
-        if ((mods1 & SHFT) < (mods2 & SHFT)) {register_code(KC_LSFT);}
+        if ((mods1 & SUPER) > (mods2 & SUPER))  { unregister_code(KC_LWIN); }
+        if ((mods1 & SUPER) < (mods2 & SUPER))  { register_code(KC_LWIN);   }
+        if ((mods1 & ALT)   > (mods2 & ALT))    { unregister_code(KC_LALT); }
+        if ((mods1 & ALT)   < (mods2 & ALT))    { register_code(KC_LALT);   }
+        if ((mods1 & CTRL)  > (mods2 & CTRL))   { unregister_code(KC_LCTL); }
+        if ((mods1 & CTRL)  < (mods2 & CTRL))   { register_code(KC_LCTL);   }
+        if ((mods1 & SHFT)  > (mods2 & SHFT))   { unregister_code(KC_LSFT); }
+        if ((mods1 & SHFT)  < (mods2 & SHFT))   { register_code(KC_LSFT);   }
 }
 
 
@@ -87,33 +88,33 @@ void SEND_CTRL_SHIFTED(uint8_t kc) {
 
 
 void symbol_code(uint32_t kc, uint8_t mods, uint32_t bitmask) {
-    uint8_t starting_mods = current_mods;
-  if ((f_chord & bitmask) == bitmask) {
+  uint8_t starting_mods = current_mods;
+  if (f_chord == (RNO | bitmask)) {
     compare_and_set_mods(starting_mods, mods);
     SEND(kc);
     compare_and_set_mods(mods, starting_mods);
 
-    f_chord = 0;
+    f_chord = f_chord & ~bitmask;
     }
 }
 
 void symbol_code_2(uint32_t kc1, uint32_t kc2, uint8_t mods1, uint8_t mods2, uint32_t bitmask) {
   uint8_t starting_mods = current_mods;
-  if ((f_chord & bitmask) == bitmask) {
+  if (f_chord == (RNO | bitmask)) {
     compare_and_set_mods(starting_mods, mods1);
     SEND(kc1);
     compare_and_set_mods(mods1, mods2);
     SEND(kc2);
     compare_and_set_mods(mods2, starting_mods);
 
-    f_chord = 0;
+    f_chord = f_chord & ~bitmask;
     }
 }
 
 
 void symbol_code_3(uint32_t kc1, uint32_t kc2, uint32_t kc3, uint8_t mods1, uint8_t mods2, uint8_t mods3, uint32_t bitmask) {
   uint8_t starting_mods = current_mods;
-  if ((f_chord & bitmask) == bitmask) {
+  if (f_chord == (RNO | bitmask)) {
     compare_and_set_mods(starting_mods, mods1);
     SEND(kc1);
     compare_and_set_mods(mods1, mods2);
@@ -122,54 +123,81 @@ void symbol_code_3(uint32_t kc1, uint32_t kc2, uint32_t kc3, uint8_t mods1, uint
     SEND(kc3);
     compare_and_set_mods(mods3, starting_mods);
 
-    f_chord = 0;
+    f_chord = f_chord & ~bitmask;
     }
 }
 
 
 void symbol_chords(void) {
-  // Uses right hand combinations that are rarely or never seen in English words
+  // Right number bar is used for symbols
 
-  uint32_t FPL = RF | RP | RL;
-  uint32_t PLT = RP | RL | RT;
-  uint32_t FPLT = RF | RP | RL | RT;
-  uint32_t PLTD = RP | RL | RT | RD;
+  if ((f_chord & RNO) > 0) {
+    // Starts with T-
+    symbol_code_3(KC_MINS, KC_DOT, KC_DOT, SHFT, SHFT, SHFT, RNO | LFT | LP | LH);    // ->>
 
-  // uint32_t RBG = RR | RB | RG;
-  // uint32_t BGS = RB | RG | RS;
-  // uint32_t RBGS = RR | RB | RG | RS;
-  // uint32_t BGSZ = RB | RG | RS | RZ;
+    // Starts with P-
+    symbol_code_2(KC_MINS, KC_DOT, SHFT, SHFT, RNO | LP | LH);                        // ->
 
-  if ((f_chord & FPLT) > 0) {
-    symbol_code(KC_LBRC, CTRL | SHFT, FPLT | RE | RU);
-    symbol_code(KC_LBRC, SHFT, FPLT | RE);
-    symbol_code(KC_RBRC, SHFT, FPLT | RU);
+    // Starts with -F
+    symbol_code(KC_9, CTRL | SHFT, RNO | RF | RR | RP | RB);        // cursive - wrap ()
+    symbol_code(KC_EQL, SHFT, RNO | RF | RR);                       // +
+    symbol_code(KC_7, SHFT, RNO | RF | RP | RL | RT);               // &
+    symbol_code(KC_1, SHFT, RNO | RF | RP | RL);                    // !
+
+    symbol_code(KC_9, SHFT, RNO | RF | RP );                        // (
+    symbol_code_2(KC_DOT, KC_MINS, NOMODS, NOMODS, RNO | RF | RL);  // .-
+    symbol_code(KC_DOT, NOMODS, RNO | RF);                          // .
+
+
+    // Starts with -R
+    symbol_code(KC_GRV, SHFT, RNO | RR | RP | RL | RT);             // ~
+    symbol_code(KC_SLSH, SHFT, RNO | RR | RP | RL);                 // ?
+    symbol_code(KC_6, SHFT, RNO | RR | RP | RG);                    // ^
+    symbol_code(KC_SLSH, NOMODS, RNO | RR | RP);                    // /
+    symbol_code(KC_4, SHFT, RNO | RR | RB | RG | RS);               // $
+    symbol_code(KC_2, SHFT, RNO | RR | RB | RG);                    // @
+    symbol_code(KC_0, SHFT, RNO | RR | RB);                         // )
+    symbol_code(KC_COMM, NOMODS, RNO | RR);                         // ,
+
+    // Starts with -P
+    symbol_code(KC_LBRC, CTRL, RNO | RP | RB | RL | RG);            // cursive - wrap []
+    symbol_code(KC_8, SHFT, RNO | RP | RB);                         // *
+    symbol_code(KC_LBRC, NOMODS, RNO | RP | RL);                    // [
+    symbol_code(KC_3, SHFT, RNO | RP | RL | RT);                    // #
+    symbol_code(KC_BSLS, SHFT, RNO | RP | RG | RS);                 // |
+    symbol_code(KC_BSLS, NOMODS, RNO | RP | RG);                    // backslash
+    symbol_code(KC_SCLN, SHFT, RNO | RP);                           // :
+
+
+    // Starts with -B
+    symbol_code(KC_5, SHFT, RNO | RB | RG | RS);                    // %
+    symbol_code(KC_RBRC, NOMODS, RNO | RB | RG);                    // ]
+    symbol_code(KC_COMM, NOMODS, RNO | RB);                         // ,
+
+    // Starts with -L
+    symbol_code(KC_LBRC, CTRL | SHFT, RNO | RL | RG | RT | RS);     // cursive - wrap {}
+    symbol_code(KC_EQL, NOMODS, RNO | RL | RG);                     // =
+    symbol_code(KC_LBRC, SHFT, RNO | RL | RT);                      // {
+    symbol_code(KC_GRV, NOMODS, RNO | RL | RS);                     // `
+    symbol_code(KC_MINS, NOMODS, RNO | RL);                         // -
+
+
+    // Starts with -G
+    symbol_code(KC_RBRC, SHFT, RNO | RG | RS);                      // }
+    symbol_code(KC_MINS, SHFT, RNO | RG);                           // _
+
+    // Starts with -T
+    symbol_code(KC_QUOT, CTRL | SHFT, RNO | RT | RS);               // cursive - wrap ""
+    symbol_code(KC_COMM, SHFT, RNO | RT | RD);                      // <
+    symbol_code(KC_QUOT, SHFT, RNO | RT);                           // "
+
+    // Starts with -S
+    symbol_code(KC_DOT, SHFT, RNO | RS | RZ);                       // >
+    symbol_code(KC_QUOT, NOMODS, RNO | RS);                         // '
+
+    f_chord = RNO;
 
   }
-
-  if ((f_chord & FPL) > 0) {
-    symbol_code(KC_9, CTRL | SHFT, FPL | RE | RU);
-    symbol_code(KC_9, SHFT, FPL | RE);
-    symbol_code(KC_0, SHFT, FPL | RU);
-  }
-
-  if ((f_chord & PLTD) > 0) {
-    symbol_code_2(KC_MINS, KC_COMM, NOMODS, SHFT, PLTD | LFT | LP);
-    symbol_code_2(KC_MINS, KC_DOT, NOMODS, SHFT, PLTD | LP | LH);
-
-
-    symbol_code_2(KC_COMM, KC_DOT, SHFT, SHFT, PLTD | RE | RU);
-    symbol_code(KC_COMM, SHFT, PLTD | RE);
-    symbol_code(KC_DOT, SHFT, PLTD | RU);
-  }
-
-  if ((f_chord & PLT) > 0) {
-
-    symbol_code(KC_LBRC, CTRL, PLT | RE | RU);
-    symbol_code(KC_LBRC, NOMODS, PLT | RE);
-    symbol_code(KC_RBRC, NOMODS, PLT | RU);
-  }
-
 }
 
 void number_code(uint32_t kc, uint32_t bitmask) {
@@ -305,7 +333,7 @@ bool process_fingerspelling(uint32_t bitmask, keyrecord_t *record) {
     if (record->event.pressed) {
         f_chord = f_chord | bitmask;
     } else if ((f_chord & bitmask) > 0) {
-      current_mods = get_current_mods();
+
       number_chords();
       symbol_chords();
       asterisk_chords();
@@ -317,6 +345,9 @@ bool process_fingerspelling(uint32_t bitmask, keyrecord_t *record) {
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
    switch (keycode) {
+            case KC_LSFT: if (record->event.pressed) { current_mods = current_mods | SHFT; }
+                          else  { current_mods = current_mods & ~SHFT; };
+                          return true;
             case F_FN: break;
             case F_PWR: break;
             case F_SU: return process_fingerspelling(LSU, record);
@@ -391,14 +422,14 @@ void matrix_scan_user(void) {
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     // Main layer, everything goes through here
     [STENO_LAYER] = LAYOUT_georgi(
-    TO(F_LAYER), STN_S1,  STN_TL,  STN_PL,  STN_HL,  STN_ST1,       STN_ST3, STN_FR,  STN_PR,  STN_LR,  STN_TR,  STN_DR,
+    TO(F_LAYER), STN_S1,  STN_TL,  STN_PL,  STN_HL,  STN_ST1,    STN_ST3, STN_FR,  STN_PR,  STN_LR,  STN_TR,  STN_DR,
     STN_PWR,  STN_S2,  STN_KL,  STN_WL,  STN_RL,  STN_ST2,       STN_ST4, STN_RR,  STN_BR,  STN_GR,  STN_SR,  STN_ZR,
     STN_A,   STN_O,  STN_N1,       STN_N7,  STN_E,   STN_U
     ),
     [F_LAYER] = LAYOUT_georgi(
     TO(STENO_LAYER), F_SU, F_TL, F_PL, F_HL, F_ST1,            F_ST3,   F_FR, F_PR, F_LR, F_TR, F_DR,
     F_PWR,           F_SD, F_KL, F_WL, F_RL, F_ST2,            F_ST4,   F_RR, F_BR, F_GR, F_SR, F_ZR,
-                                 F_A,  F_O,  F_NL,             KC_LSFT, F_E,  F_U
+                                 F_A,  F_O,  F_NL,             F_NR, F_E,  F_U
     )
 };
 
