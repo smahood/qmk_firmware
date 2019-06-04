@@ -1,20 +1,9 @@
-/*
- * Good on you for modifying your layout, this is the most nonQMK layout you will come across
- * There are three modes, Steno (the default), QWERTY (Toggleable) and a Momentary symbol layer
- *
- * Don't modify the steno layer directly, instead add chords using the keycodes and macros
- * from sten.h to the layout you want to modify.
- *
- * Observe the comment above processQWERTY!
- *
- * http://docs.gboards.ca
- */
-
-
 #include QMK_KEYBOARD_H
 #include "action_layer.h"
 #include "fingerspelling.h"
+#include "process_unicode.h"
 #define IGNORE_MOD_TAP_INTERRUPT
+
 
 #define S_LAYER 0
 #define F_LAYER 1
@@ -42,12 +31,6 @@ void SEND(uint32_t kc) {
     unregister_code(kc);
 }
 
-// void custom_layer_tg (uint16_t keycode, keyrecord_t *record, uint8_t layer) {
-//   uint8_t current_layer = biton32(layer_state);
-
-
-// }
-
 void compare_and_set_mods (uint8_t mods1, uint8_t mods2) {
         if ((mods1 & SUPER) > (mods2 & SUPER))  { unregister_code(KC_LWIN); }
         if ((mods1 & SUPER) < (mods2 & SUPER))  { register_code(KC_LWIN);   }
@@ -59,6 +42,12 @@ void compare_and_set_mods (uint8_t mods1, uint8_t mods2) {
         if ((mods1 & SHFT)  < (mods2 & SHFT))   { register_code(KC_LSFT);   }
 }
 
+void f_code(uint32_t kc, uint32_t bitmask) {
+    if ((f_chord & bitmask) == bitmask) {
+        SEND(kc);
+        f_chord = f_chord & ~bitmask;
+      }
+}
 
 void number_code(uint32_t kc, uint32_t bitmask) {
     if ((f_chord & bitmask) == bitmask) {
@@ -67,6 +56,23 @@ void number_code(uint32_t kc, uint32_t bitmask) {
       }
 }
 
+
+void unicode_code(uint32_t code, uint32_t bitmask) {
+  // This is specific to Linux with IBus according to https://beta.docs.qmk.fm/features/feature_unicode#input-modes
+  // There is a more standard way to output this but I couldn't get it to work
+  if ((f_chord & bitmask) == bitmask) {
+      register_code(KC_LCTL);
+      register_code(KC_LSFT);
+      SEND(KC_U);
+      unregister_code(KC_LSFT);
+      unregister_code(KC_LCTL);
+
+      register_hex(code);
+
+      SEND(KC_ENT);
+      f_chord = f_chord & ~bitmask;
+      }
+}
 
 void symbol_code(uint32_t kc, uint8_t mods, uint32_t bitmask) {
   uint8_t starting_mods = current_mods;
@@ -189,8 +195,6 @@ void symbol_chords(void) {
     // Starts with -Z
     symbol_code_3(KC_MINS, KC_DOT, KC_DOT, NOMODS, SHFT, SHFT, RNO | RZ);    // ->>
 
-
-
     f_chord = RNO;
   }
 }
@@ -214,17 +218,10 @@ void number_chords(void){
   }
 
 
-
-void f_code(uint32_t kc, uint32_t bitmask) {
-    if ((f_chord & bitmask) == bitmask) {
-        SEND(kc);
-        f_chord = f_chord & ~bitmask;
-      }
-}
-
-
 void asterisk_chords(void){
   f_code(KC_BSPC, ST3);
+
+  // unicode_code(0x2813, ST4);   // Example for unicode output
 }
 
 void fingerspelling_chords(void){
@@ -412,7 +409,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
                              F_A,  F_O,  MO(M_LAYER),                 F_NR,  F_E,  F_U
     ),
     [M_LAYER] = LAYOUT_georgi(
-    TO(S_LAYER), KC_NO, KC_NO, KC_NO, KC_NO, KC_NO,                   KC_PGUP,  KC_HOME, KC_UP,   KC_END,   KC_PGDN, KC_NO,
+    TO(S_LAYER), UC(0x2813), KC_NO, KC_NO, KC_NO, KC_NO,                   KC_PGUP,  KC_HOME, KC_UP,   KC_END,   KC_PGDN, KC_NO,
     KC_NO,       KC_NO, KC_NO, KC_NO, KC_NO, KC_NO,                   KC_NO,    KC_LEFT, KC_DOWN, KC_RIGHT, KC_NO,   KC_NO,
                                KC_NO, KC_NO, MO(M_LAYER),             KC_LCTRL, KC_LSFT, KC_NO
     )

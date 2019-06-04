@@ -3,6 +3,7 @@
 # Make sure you have dfu-programmer installed!
 #----------------------------------------------------------------------------
 
+UNICODE_ENABLE   = yes
 NO_REPEAT				 = no
 VERBOSE					 = yes
 KEYBOARD_SHARED_EP       = yes
