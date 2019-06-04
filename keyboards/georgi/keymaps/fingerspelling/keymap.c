@@ -13,6 +13,8 @@
 uint32_t f_chord = 0;                // Fingerspelling Chord
 
 uint8_t current_mods = NOMODS;
+uint8_t keydown_mods = NOMODS;
+uint8_t keyup_mods = NOMODS;
 
 uint8_t prev_layer = 0;
 
@@ -32,15 +34,26 @@ void SEND(uint32_t kc) {
 }
 
 void compare_and_set_mods (uint8_t mods1, uint8_t mods2) {
-        if ((mods1 & SUPER) > (mods2 & SUPER))  { unregister_code(KC_LWIN); }
-        if ((mods1 & SUPER) < (mods2 & SUPER))  { register_code(KC_LWIN);   }
-        if ((mods1 & ALT)   > (mods2 & ALT))    { unregister_code(KC_LALT); }
-        if ((mods1 & ALT)   < (mods2 & ALT))    { register_code(KC_LALT);   }
-        if ((mods1 & CTRL)  > (mods2 & CTRL))   { unregister_code(KC_LCTL); }
-        if ((mods1 & CTRL)  < (mods2 & CTRL))   { register_code(KC_LCTL);   }
-        if ((mods1 & SHFT)  > (mods2 & SHFT))   { unregister_code(KC_LSFT); }
-        if ((mods1 & SHFT)  < (mods2 & SHFT))   { register_code(KC_LSFT);   }
+  // SEND(KC_3);
+  if ((mods1 & SUPER) > (mods2 & SUPER))  { unregister_code(KC_LWIN); }
+  if ((mods1 & SUPER) < (mods2 & SUPER))  { register_code(KC_LWIN);   }
+  if ((mods1 & ALT)   > (mods2 & ALT))    { unregister_code(KC_LALT); }
+  if ((mods1 & ALT)   < (mods2 & ALT))    { register_code(KC_LALT);   }
+  if ((mods1 & CTRL)  > (mods2 & CTRL))   { unregister_code(KC_LCTL); }
+  if ((mods1 & CTRL)  < (mods2 & CTRL))   { register_code(KC_LCTL);   }
+  // if ((mods1 & SHFT) == SHFT) {SEND(KC_4);}
+  // if ((mods2 & SHFT) == SHFT) {SEND(KC_5);}
+
+  if ((mods1 & SHFT)  > (mods2 & SHFT))   {unregister_code(KC_LSFT);
+                                          // SEND(KC_6);
+                                          }
+  if ((mods1 & SHFT)  < (mods2 & SHFT))   {
+                                          // SEND(KC_7);
+                                          register_code(KC_LSFT);   }
 }
+
+
+
 
 void f_code(uint32_t kc, uint32_t bitmask) {
     if ((f_chord & bitmask) == bitmask) {
@@ -218,11 +231,6 @@ void number_chords(void){
   }
 
 
-void asterisk_chords(void){
-  f_code(KC_BSPC, ST3);
-
-  // unicode_code(0x2813, ST4);   // Example for unicode output
-}
 
 void fingerspelling_chords(void){
   // This fuction checks for all the standard fingerspelling rules in Steno Order
@@ -314,19 +322,59 @@ void fingerspelling_chords(void){
   f_code(KC_Z, RZ);
 }
 
+void activate_mods(uint32_t bitmask){
+  if ((bitmask == ST3) && ((f_chord & RF) == RF)) {
+      keydown_mods = keydown_mods | SHFT;
+      // f_chord = f_chord & ~RF;
+    // SEND(KC_1);
+  }
+  if ((bitmask == RF) && ((f_chord & ST3) == ST3)) {
+      keydown_mods = keydown_mods | SHFT;
+      // f_chord = f_chord & ~RF;
+    // SEND(KC_1);
+  }
+
+
+};
+
+void deactivate_mods(uint32_t bitmask){
+  if (bitmask == ST3) {
+    keyup_mods = keyup_mods & ~SHFT;
+    f_chord = f_chord & ~ST3;
+    // SEND(KC_2);
+  }
+  if (bitmask == RF) {
+    keyup_mods = keyup_mods & ~SHFT;
+    f_chord = f_chord & ~ RF;
+  }
+
+};
+
 
 bool process_fingerspelling(uint32_t bitmask, keyrecord_t *record) {
     if (record->event.pressed) {
-        f_chord = f_chord | bitmask;
-    } else if ((f_chord & bitmask) > 0) {
-
-      number_chords();
-      symbol_chords();
-      asterisk_chords();
-      fingerspelling_chords();
+      f_chord = f_chord | bitmask;
+      activate_mods(bitmask);
+    }
+    else {
+      if (bitmask == RF) {
+        deactivate_mods(bitmask);
+      }
+      if ((f_chord & bitmask) > 0) {
+        keyup_mods = keydown_mods;
+        deactivate_mods(bitmask);
+        number_chords();
+        symbol_chords();
+        compare_and_set_mods(current_mods, keydown_mods);
+        fingerspelling_chords();
+        compare_and_set_mods(keydown_mods, keyup_mods);
+        keydown_mods = keyup_mods;
+        current_mods = keyup_mods;
+      }
     }
     return true;
 }
+
 
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
