@@ -12,19 +12,29 @@
 
 
 #include QMK_KEYBOARD_H
+#include "action_layer.h"
 #include "fingerspelling.h"
 #define IGNORE_MOD_TAP_INTERRUPT
+
+#define S_LAYER 0
+#define F_LAYER 1
+#define M_LAYER 2
+
 
 uint32_t f_chord = 0;                // Fingerspelling Chord
 
 uint8_t current_mods = NOMODS;
+
+uint8_t prev_layer = 0;
 
 
 enum custom_keycodes {
 PLACEHOLDER = SAFE_RANGE,  F_FN, F_PWR,
     F_SU, F_SD, F_TL, F_KL, F_PL,  F_WL, F_HL, F_RL, F_A, F_O,
     F_ST1, F_ST2, F_ST3, F_ST4, F_NL, F_NR,
-    F_E, F_U, F_FR, F_RR, F_PR, F_BR, F_LR, F_GR, F_TR, F_SR, F_DR, F_ZR};
+    F_E, F_U, F_FR, F_RR, F_PR, F_BR, F_LR, F_GR, F_TR, F_SR, F_DR, F_ZR,
+    F_NR_ON
+    };
 
 
 void SEND(uint32_t kc) {
@@ -32,32 +42,11 @@ void SEND(uint32_t kc) {
     unregister_code(kc);
 }
 
-
-void SEND_SHIFTED(uint8_t kc) {
-    bool curr_shifted = (keyboard_report->mods & MOD_BIT(KC_LSHIFT));
-    if (curr_shifted) { SEND(kc); }
-    else {  register_code(KC_LSFT);
-            SEND(kc);
-            unregister_code(KC_LSFT); }
-}
-
-void SEND_CTRLED(uint8_t kc) {
-    bool curr_ctrled = (keyboard_report->mods & MOD_BIT(KC_LCTRL));
-    if (curr_ctrled) { SEND(kc); }
-    else {  register_code(KC_LCTRL);
-            register_code(kc);
-            unregister_code(kc);
-            unregister_code(KC_LCTRL); }
-}
+// void custom_layer_tg (uint16_t keycode, keyrecord_t *record, uint8_t layer) {
+//   uint8_t current_layer = biton32(layer_state);
 
 
-uint8_t get_current_mods(void) {
-    uint8_t mods = NOMODS;
-    if (keyboard_report->mods & MOD_BIT(KC_LCTRL)) { mods = mods | CTRL; }
-    if (keyboard_report->mods & MOD_BIT(KC_LSHIFT)) { mods = mods | SHFT; }
-    return mods;
-}
-
+// }
 
 void compare_and_set_mods (uint8_t mods1, uint8_t mods2) {
         if ((mods1 & SUPER) > (mods2 & SUPER))  { unregister_code(KC_LWIN); }
@@ -71,19 +60,11 @@ void compare_and_set_mods (uint8_t mods1, uint8_t mods2) {
 }
 
 
-
-
-void SEND_CTRL_SHIFTED(uint8_t kc) {
-    bool curr_ctrled = (keyboard_report->mods & MOD_BIT(KC_LCTRL));
-    bool curr_shifted = (keyboard_report->mods & MOD_BIT(KC_LSHIFT));
-
-    if (!curr_ctrled) { register_code(KC_LCTRL); }
-    if (!curr_shifted) { register_code(KC_LSFT); }
-
-    SEND(kc);
-
-    if (!curr_ctrled) { unregister_code(KC_LCTRL); }
-    if (!curr_shifted) { unregister_code(KC_LSFT); }
+void number_code(uint32_t kc, uint32_t bitmask) {
+    if ((f_chord & bitmask) == bitmask) {
+      SEND(kc);
+      f_chord = f_chord & ~bitmask;
+      }
 }
 
 
@@ -132,11 +113,18 @@ void symbol_chords(void) {
   // Right number bar is used for symbols
 
   if ((f_chord & RNO) > 0) {
-    // Starts with T-
-    symbol_code_3(KC_MINS, KC_DOT, KC_DOT, SHFT, SHFT, SHFT, RNO | LFT | LP | LH);    // ->>
-
-    // Starts with P-
-    symbol_code_2(KC_MINS, KC_DOT, SHFT, SHFT, RNO | LP | LH);                        // ->
+    number_code(KC_1, LSU);
+    number_code(KC_2, LFT);
+    number_code(KC_3, LP);
+    number_code(KC_4, LH);
+    number_code(KC_5, LA);
+    number_code(KC_5, ST1);
+    number_code(KC_6, LSD);
+    number_code(KC_7, LK);
+    number_code(KC_8, LW);
+    number_code(KC_9, LR);
+    number_code(KC_0, ST2);
+    number_code(KC_0, LO);
 
     // Starts with -F
     symbol_code(KC_9, CTRL | SHFT, RNO | RF | RR | RP | RB);        // cursive - wrap ()
@@ -195,17 +183,18 @@ void symbol_chords(void) {
     symbol_code(KC_DOT, SHFT, RNO | RS | RZ);                       // >
     symbol_code(KC_QUOT, NOMODS, RNO | RS);                         // '
 
-    f_chord = RNO;
+    // Starts with -D
+    symbol_code_2(KC_MINS, KC_DOT, NOMODS, SHFT, RNO | RD);                  // ->
 
+    // Starts with -Z
+    symbol_code_3(KC_MINS, KC_DOT, KC_DOT, NOMODS, SHFT, SHFT, RNO | RZ);    // ->>
+
+
+
+    f_chord = RNO;
   }
 }
 
-void number_code(uint32_t kc, uint32_t bitmask) {
-    if ((f_chord & bitmask) == bitmask) {
-      SEND(kc);
-      f_chord = f_chord & ~bitmask;
-      }
-}
 
 
 void number_chords(void){
@@ -365,9 +354,18 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
                        else  { process_fingerspelling(LNO, record);
                               f_chord = f_chord & ~LNO; };
                        return true;
-            case F_NR: if (record->event.pressed) { f_chord = f_chord | RNO; }
+
+            case F_NR_ON: if (record->event.pressed)  { prev_layer = S_LAYER;
+                                                        layer_on(F_LAYER);
+                                                        f_chord = f_chord | RNO;
+                                                      }
+                       return true;
+            case F_NR: if (record->event.pressed) { prev_layer = 1;
+                                                    f_chord = f_chord | RNO; }
                        else  { process_fingerspelling(RNO, record);
-                              f_chord = f_chord & ~RNO; };
+                               f_chord = f_chord & ~RNO;
+                               if (prev_layer == 0) { layer_off(F_LAYER); }
+                               };
                        return true;
             case F_ST1: return process_fingerspelling(ST1, record);
             case F_ST2: return process_fingerspelling(ST2, record);
@@ -401,84 +399,22 @@ void matrix_scan_user(void) {
 
 
 
-
-
-
-// QMK Layers
-#define STENO_LAYER   0
-#define F_LAYER   1
-
-/* Keyboard Layout
- * ,---------------------------------.    ,------------------------------.
- * | FN  | LSU | LFT | LP | LH | ST1 |    | ST3 | RF | RP | RL | RT | RD |
- * |-----+-----+-----+----+----|-----|    |-----|----+----+----+----+----|
- * | PWR | LSD | LK  | LW | LR | ST2 |    | ST4 | RR | BB | RG | RS | RZ |
- * `---------------------------------'    `------------------------------'
- *                   ,---------------,    .---------------.
- *                   | LNO | LA | LO |    | RE | RU | RNO |
- *                   `---------------'    `---------------'
- */
-
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     // Main layer, everything goes through here
-    [STENO_LAYER] = LAYOUT_georgi(
-    TO(F_LAYER), STN_S1,  STN_TL,  STN_PL,  STN_HL,  STN_ST1,    STN_ST3, STN_FR,  STN_PR,  STN_LR,  STN_TR,  STN_DR,
-    STN_PWR,  STN_S2,  STN_KL,  STN_WL,  STN_RL,  STN_ST2,       STN_ST4, STN_RR,  STN_BR,  STN_GR,  STN_SR,  STN_ZR,
-    STN_A,   STN_O,  STN_N1,       STN_N7,  STN_E,   STN_U
+    [S_LAYER] = LAYOUT_georgi(
+    TO(F_LAYER), STN_S1,  STN_TL,  STN_PL,  STN_HL,  STN_ST1,         STN_ST3,      STN_FR,  STN_PR,  STN_LR,  STN_TR,  STN_DR,
+    TO(M_LAYER), STN_S2,  STN_KL,  STN_WL,  STN_RL,  STN_ST2,         STN_ST4,      STN_RR,  STN_BR,  STN_GR,  STN_SR,  STN_ZR,
+                                   STN_A,   STN_O,   MO(M_LAYER),     F_NR_ON,      STN_E,   STN_U
     ),
     [F_LAYER] = LAYOUT_georgi(
-    TO(STENO_LAYER), F_SU, F_TL, F_PL, F_HL, F_ST1,            F_ST3,   F_FR, F_PR, F_LR, F_TR, F_DR,
-    F_PWR,           F_SD, F_KL, F_WL, F_RL, F_ST2,            F_ST4,   F_RR, F_BR, F_GR, F_SR, F_ZR,
-                                 F_A,  F_O,  F_NL,             F_NR, F_E,  F_U
+    TO(S_LAYER), F_SU, F_TL, F_PL, F_HL, F_ST1,                       F_ST3, F_FR, F_PR, F_LR, F_TR, F_DR,
+    TO(M_LAYER), F_SD, F_KL, F_WL, F_RL, F_ST2,                       F_ST4, F_RR, F_BR, F_GR, F_SR, F_ZR,
+                             F_A,  F_O,  MO(M_LAYER),                 F_NR,  F_E,  F_U
+    ),
+    [M_LAYER] = LAYOUT_georgi(
+    TO(S_LAYER), KC_NO, KC_NO, KC_NO, KC_NO, KC_NO,                   KC_PGUP,  KC_HOME, KC_UP,   KC_END,   KC_PGDN, KC_NO,
+    KC_NO,       KC_NO, KC_NO, KC_NO, KC_NO, KC_NO,                   KC_NO,    KC_LEFT, KC_DOWN, KC_RIGHT, KC_NO,   KC_NO,
+                               KC_NO, KC_NO, MO(M_LAYER),             KC_LCTRL, KC_LSFT, KC_NO
     )
+
 };
-
-
-    // P(RP | RL | RB | RG,   SEND_SHIFTED(KC_8));
-
-    // P(RF | RP | RL | RT,   SEND_SHIFTED(KC_EQL));
-    // P(RR | RB | RG | RS,   SEND(KC_EQL));
-
-    // P(RF | RP | RG,        SEND_SHIFTED(KC_BSLS));
-    // P(RR | RP | RL,        SEND_SHIFTED(KC_SLSH));
-    // P(RR | RP | RG,        SEND_SHIFTED(KC_6));
-    // P(RF | RP | RL,        SEND_SHIFTED(KC_3));
-    // P(RR | RB | RG,        SEND_SHIFTED(KC_5));
-    // P(RP | RL | RT,        SEND_SHIFTED(KC_1));
-    // P(RB | RG | RS,        SEND_SHIFTED(KC_2));
-
-    // P(RF | RL,             SEND(KC_MINS));
-    // P(RR | RG,             SEND_SHIFTED(KC_MINS));
-    // P(RF | RR,             SEND_CTRL_SHIFTED(KC_9));
-    // P(RF | RP,             SEND_SHIFTED(KC_SCLN));
-    // P(RF | RT,             SEND_SHIFTED(KC_7));
-    // P(RR | RS,             SEND_SHIFTED (KC_4));
-    // P(RR | RP,             SEND(KC_SLSH));
-    // P(RR | RB,             SEND(KC_SCLN));
-    // P(RP | RB,             SEND_CTRLED(KC_LBRC));
-    // P(RP | RL,             SEND(KC_DOT));
-    // P(RP | RG,             SEND(KC_BSLS));
-    // P(RB | RG,             SEND(KC_COMM));
-    // P(RL | RG,             SEND_CTRL_SHIFTED(KC_LBRC));
-    // P(RL | RT,             SEND_SHIFTED(KC_QUOT));
-    // P(RG | RS,             SEND(KC_QUOT));
-    // P(RT | RD,             SEND_SHIFTED(KC_GRV));
-    // P(RT | RS,             SEND_CTRL_SHIFTED(KC_QUOT));
-    // P(RS | RZ,             SEND(KC_GRV));
-
-
-
-
-    // P(ST1,                 SEND(KC_BSPC));
-    // P(ST2,                 SEND(KC_BSPC));
-    // P(ST3,                 SEND(KC_BSPC));
-    // P(ST4,                 SEND(KC_BSPC));
-    // P(RNO,                 SEND(KC_LSFT));
-    // P(RF,                  SEND_SHIFTED(KC_9));
-    // P(RR,                  SEND_SHIFTED(KC_0));
-    // P(RP,                  SEND(KC_LBRC));
-    // P(RB,                  SEND(KC_RBRC));
-    // P(RL,                  SEND_SHIFTED(KC_LBRC));
-    // P(RG,                  SEND_SHIFTED(KC_RBRC));
-    // P(RT,                  SEND_SHIFTED(KC_COMM));
-    // P(RS,                  SEND_SHIFTED(KC_DOT));
