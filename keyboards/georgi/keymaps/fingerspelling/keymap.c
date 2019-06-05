@@ -4,20 +4,15 @@
 #include "process_unicode.h"
 #define IGNORE_MOD_TAP_INTERRUPT
 
-
-#define S_LAYER 0
-#define F_LAYER 1
-#define M_LAYER 2
-
+#define S_LAYER 0                    // Steno layer
+#define F_LAYER 1                    // Fingerspelling layer (includes numbers and symbols)
+#define M_LAYER 2                    // Movement layer
 
 uint32_t f_chord = 0;                // Fingerspelling Chord
 uint32_t m_chord = 0;                // Modifier chord
 
-uint8_t current_mods = NOMODS;
-uint8_t keydown_mods = NOMODS;
-uint8_t keyup_mods = NOMODS;
-
-uint8_t prev_layer = 0;
+uint8_t current_mods = NOMODS;       // Stores state of current steno modifiers - could be different than what QMK sees
+uint8_t prev_layer = 0;              // Used to allow access to symbol layer from both steno and fingerspelling layers
 
 
 enum custom_keycodes {
@@ -34,41 +29,40 @@ void SEND(uint32_t kc) {
     unregister_code(kc);
 }
 
+
 uint8_t compare_and_set_mods (uint8_t prev, uint8_t next) {
-  // SEND(KC_3);
+  // Register and unregister modifier keys to move keyboard from prev to next state
   if ((prev & SUPER) > (next & SUPER))  { unregister_code(KC_LWIN); }
   if ((prev & SUPER) < (next & SUPER))  { register_code(KC_LWIN);   }
   if ((prev & ALT)   > (next & ALT))    { unregister_code(KC_LALT); }
   if ((prev & ALT)   < (next & ALT))    { register_code(KC_LALT);   }
   if ((prev & CTRL)  > (next & CTRL))   { unregister_code(KC_LCTL); }
   if ((prev & CTRL)  < (next & CTRL))   { register_code(KC_LCTL);   }
-  // if ((prev & SHFT) == SHFT) {SEND(KC_4);}
-  // if ((next & SHFT) == SHFT) {SEND(KC_5);}
-
-  if ((prev & SHFT)  > (next & SHFT))   {unregister_code(KC_LSFT);
-                                          // SEND(KC_6);
-                                          }
-  if ((prev & SHFT)  < (next & SHFT))   {
-                                          // SEND(KC_7);
-                                          register_code(KC_LSFT);   }
+  if ((prev & SHFT)  > (next & SHFT))   { unregister_code(KC_LSFT); }
+  if ((prev & SHFT)  < (next & SHFT))   { register_code(KC_LSFT);   }
   return next;
 }
 
 
-
-
 void f_code(uint32_t kc, uint32_t bitmask) {
+  // Used for all normal keypresses in fingerspelling mode
+  // Clears keys from chord once used
     if ((f_chord & bitmask) == bitmask) {
         SEND(kc);
         f_chord = f_chord & ~bitmask;
       }
 }
 
-void number_code(uint32_t kc, uint32_t bitmask) {
-    if ((f_chord & bitmask) == bitmask) {
+void number_code(uint32_t kc, uint32_t bitmask, bool twice) {
+  // Type numbers, doesn't clear the number bar (can hold it down through multiple chords)
+  // Must press the doubling key or reverse key again on each chord
+  if ((f_chord & bitmask) == bitmask) {
+    SEND(kc);
+    if (twice == true) {
       SEND(kc);
-      f_chord = f_chord & ~bitmask;
-      }
+    }
+    f_chord = f_chord & ~bitmask;
+  }
 }
 
 void unicode_code(uint32_t code, uint32_t bitmask) {
@@ -89,6 +83,7 @@ void unicode_code(uint32_t code, uint32_t bitmask) {
 }
 
 void symbol_code(uint32_t kc, uint8_t mods, uint32_t bitmask) {
+  // Send keycode with the desired modifiers, does not clear the number bar
   uint8_t starting_mods = current_mods;
   if (f_chord == (RNO | bitmask)) {
     compare_and_set_mods(starting_mods, mods);
@@ -100,6 +95,7 @@ void symbol_code(uint32_t kc, uint8_t mods, uint32_t bitmask) {
 }
 
 void symbol_code_2(uint32_t kc1, uint32_t kc2, uint8_t mods1, uint8_t mods2, uint32_t bitmask) {
+  // Same as symbol_code but can specify 2 keycodes and modifier settings
   uint8_t starting_mods = current_mods;
   if (f_chord == (RNO | bitmask)) {
     compare_and_set_mods(starting_mods, mods1);
@@ -113,6 +109,7 @@ void symbol_code_2(uint32_t kc1, uint32_t kc2, uint8_t mods1, uint8_t mods2, uin
 }
 
 void symbol_code_3(uint32_t kc1, uint32_t kc2, uint32_t kc3, uint8_t mods1, uint8_t mods2, uint8_t mods3, uint32_t bitmask) {
+  // Same as symbol_code but can specify 3 keycodes and modifier settings
   uint8_t starting_mods = current_mods;
   if (f_chord == (RNO | bitmask)) {
     compare_and_set_mods(starting_mods, mods1);
@@ -128,22 +125,40 @@ void symbol_code_3(uint32_t kc1, uint32_t kc2, uint32_t kc3, uint8_t mods1, uint
 }
 
 void symbol_chords(void) {
-  // Right number bar is used for symbols
+  // Uses RNO for symbols and numbers
+  // Number bar stays active at end of function, ready for next chord
+  // Clears RZ and RD so they will have to be pressed again on next chord
+  if ((f_chord & RNO) == RNO) {
+    bool twice = ((f_chord & RZ) == RZ); // Send each digit twice if RZ is pressed
 
-  if ((f_chord & RNO) > 0) {
-    number_code(KC_1, LSU);
-    number_code(KC_2, LFT);
-    number_code(KC_3, LP);
-    number_code(KC_4, LH);
-    number_code(KC_5, LA);
-    number_code(KC_5, ST1);
-    number_code(KC_6, LSD);
-    number_code(KC_7, LK);
-    number_code(KC_8, LW);
-    number_code(KC_9, LR);
-    number_code(KC_0, ST2);
-    number_code(KC_0, LO);
-
+    if ((f_chord & RD) == RD) { // Reverse when RD is pressed
+      number_code(KC_0, LO, twice);
+      number_code(KC_0, ST2, twice);
+      number_code(KC_9, LR, twice);
+      number_code(KC_8, LW, twice);
+      number_code(KC_7, LK, twice);
+      number_code(KC_6, LSD, twice);
+      number_code(KC_5, LA, twice);
+      number_code(KC_5, ST1, twice);
+      number_code(KC_4, LH, twice);
+      number_code(KC_3, LP, twice);
+      number_code(KC_2, LFT, twice);
+      number_code(KC_1, LSU, twice);
+    }
+    else {
+      number_code(KC_1, LSU, twice);
+      number_code(KC_2, LFT, twice);
+      number_code(KC_3, LP, twice);
+      number_code(KC_4, LH, twice);
+      number_code(KC_5, LA, twice);
+      number_code(KC_5, ST1, twice);
+      number_code(KC_6, LSD, twice);
+      number_code(KC_7, LK, twice);
+      number_code(KC_8, LW, twice);
+      number_code(KC_9, LR, twice);
+      number_code(KC_0, ST2, twice);
+      number_code(KC_0, LO, twice);
+    }
     // Starts with -F
     symbol_code(KC_9, CTRL | SHFT, RNO | RF | RR | RP | RB);        // cursive - wrap ()
     symbol_code(KC_EQL, SHFT, RNO | RF | RR);                       // +
@@ -183,12 +198,15 @@ void symbol_chords(void) {
     // Starts with -L
     symbol_code(KC_LBRC, CTRL | SHFT, RNO | RL | RG | RT | RS);     // cursive - wrap {}
     symbol_code(KC_EQL, NOMODS, RNO | RL | RG);                     // =
+    symbol_code_2(KC_MINS, KC_DOT, NOMODS, SHFT, RNO | RL | RT | RD);  // ->
     symbol_code(KC_LBRC, SHFT, RNO | RL | RT);                      // {
     symbol_code(KC_GRV, NOMODS, RNO | RL | RS);                     // `
     symbol_code(KC_MINS, NOMODS, RNO | RL);                         // -
 
 
+
     // Starts with -G
+    symbol_code_3(KC_MINS, KC_DOT, KC_DOT, NOMODS, SHFT, SHFT, RNO | RG | RS | RZ);    // ->>
     symbol_code(KC_RBRC, SHFT, RNO | RG | RS);                      // }
     symbol_code(KC_MINS, SHFT, RNO | RG);                           // _
 
@@ -201,31 +219,10 @@ void symbol_chords(void) {
     symbol_code(KC_DOT, SHFT, RNO | RS | RZ);                       // >
     symbol_code(KC_QUOT, NOMODS, RNO | RS);                         // '
 
-    // Starts with -D
-    symbol_code_2(KC_MINS, KC_DOT, NOMODS, SHFT, RNO | RD);                  // ->
-
-    // Starts with -Z
-    symbol_code_3(KC_MINS, KC_DOT, KC_DOT, NOMODS, SHFT, SHFT, RNO | RZ);    // ->>
-
     f_chord = RNO;
   }
 }
 
-void number_chords(void){
-  if ((f_chord & LNO) > 0) {
-    number_code(KC_1, LSU);
-    number_code(KC_2, LFT);
-    number_code(KC_3, LP);
-    number_code(KC_4, LH);
-    number_code(KC_5, ST1);
-    number_code(KC_5, ST1);
-    number_code(KC_6, RF);
-    number_code(KC_7, RP);
-    number_code(KC_8, RL);
-    number_code(KC_9, RT);
-    number_code(KC_0, RD);
-  }
-}
 
 void fingerspelling_chords(void){
   // This fuction checks for all the standard fingerspelling rules in Steno Order
@@ -318,6 +315,7 @@ void fingerspelling_chords(void){
 }
 
 void move_to_m_chords(uint32_t bitmask) {
+  // Checks and then moves matching keys from the fingerspelling chord to the modifier chords
   if ((m_chord & bitmask) == bitmask) {
     m_chord = m_chord | bitmask;
     f_chord = f_chord & ~bitmask;
@@ -325,6 +323,7 @@ void move_to_m_chords(uint32_t bitmask) {
 }
 
 uint8_t mod_code(uint32_t bitmask, uint8_t modifier, uint8_t state) {
+  // Checks to see if the modifier state needs to change and returns the new modifier state.
   if ((m_chord & bitmask) == bitmask) {
     state = state | modifier;
   } else { state = state & ~modifier;}
@@ -332,8 +331,8 @@ uint8_t mod_code(uint32_t bitmask, uint8_t modifier, uint8_t state) {
 }
 
 uint8_t mod_state(void) {
+  // Returns the modifier state based on the current modifier chord
   uint8_t state = current_mods;
-
   state = mod_code(ST3 | RF, SHFT, state);
   state = mod_code(ST3 | RP, CTRL, state);
   state = mod_code(ST3 | RL, ALT, state);
@@ -344,29 +343,42 @@ uint8_t mod_state(void) {
 
 bool process_fingerspelling(uint32_t bitmask, keyrecord_t *record) {
     if (record->event.pressed) {
+      // Add pressed key to fingerspelling chord and modifier chords
+      // The modifier chord can have extra keys active without a problem
       f_chord = f_chord | bitmask;
       m_chord = m_chord | bitmask;
 
+      // If the bitmasks in the fingerspelling match modifier chords,
+      // clear them from the fingerspelling chord
+      // These need to match those in mod_state (I should define this globally instead)
       move_to_m_chords(ST3 | RF);
       move_to_m_chords(ST3 | RP);
       move_to_m_chords(ST3 | RL);
       move_to_m_chords(ST3 | RT);
 
+      // Activate the current modifier state
       current_mods = compare_and_set_mods(current_mods, mod_state());
     }
     else {
-      number_chords();
+      // If the symbols are active, fingerspelling chords should not do anything
+      // Can probably add an if statement here (left out in case I want to change something)
       symbol_chords();
       fingerspelling_chords();
+      // Clear released key from the modifier chords
       m_chord = m_chord & ~bitmask;
+      // Refresh the current modifiers after firing other chords
+      // Expected behavior: When releasing modifier keys, fire all chords and change
+      //                    modifier state. When releasing non-modifier keys, fire all
+      //                    chords and leave modifier state the same.
+
       current_mods = compare_and_set_mods(current_mods, mod_state());
     }
     return true;
 }
 
 
-
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
+  // There might be a much nicer way to do this, but I haven't looked at changing it yet.
    switch (keycode) {
             case KC_LSFT: if (record->event.pressed) { current_mods = current_mods | SHFT; }
                           else  { current_mods = current_mods & ~SHFT; };
