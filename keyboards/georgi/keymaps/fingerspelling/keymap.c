@@ -318,53 +318,48 @@ void fingerspelling_chords(void){
 }
 
 void move_to_m_chords(uint32_t bitmask) {
-  m_chord = m_chord | bitmask;
-  f_chord = f_chord & ~bitmask;
+  if ((m_chord & bitmask) == bitmask) {
+    m_chord = m_chord | bitmask;
+    f_chord = f_chord & ~bitmask;
+  }
 }
 
-
+uint8_t mod_code(uint32_t bitmask, uint8_t modifier, uint8_t state) {
+  if ((m_chord & bitmask) == bitmask) {
+    state = state | modifier;
+  } else { state = state & ~modifier;}
+  return state;
+}
 
 uint8_t mod_state(void) {
   uint8_t state = current_mods;
 
-  if ((m_chord & (ST3 | RF)) == (ST3 | RF)) {
-    state = state | SHFT;
-  } else { state = state & ~SHFT;}
-
+  state = mod_code(ST3 | RF, SHFT, state);
+  state = mod_code(ST3 | RP, CTRL, state);
+  state = mod_code(ST3 | RL, ALT, state);
+  state = mod_code(ST3 | RT, SUPER, state);
   return state;
-}
-
-void modifier_chords_pressed(uint32_t bitmask){
-  m_chord = m_chord | bitmask;
-
-  if ((m_chord & (ST3 | RF)) == (ST3 | RF)) {
-      move_to_m_chords(RF | ST3);
-  }
-  if ((m_chord & (ST3 | RP)) == (ST3 | RP)) {
-      move_to_m_chords(RF | ST3);
-  }
-
-  current_mods = compare_and_set_mods(current_mods, mod_state());
-}
-
-void modifier_chords_released(uint32_t bitmask){
-  m_chord = m_chord & ~bitmask;
-  current_mods = compare_and_set_mods(current_mods, mod_state());
 }
 
 
 bool process_fingerspelling(uint32_t bitmask, keyrecord_t *record) {
     if (record->event.pressed) {
       f_chord = f_chord | bitmask;
-      modifier_chords_pressed(bitmask);
+      m_chord = m_chord | bitmask;
+
+      move_to_m_chords(ST3 | RF);
+      move_to_m_chords(ST3 | RP);
+      move_to_m_chords(ST3 | RL);
+      move_to_m_chords(ST3 | RT);
+
+      current_mods = compare_and_set_mods(current_mods, mod_state());
     }
     else {
-      if ((f_chord & bitmask) > 0) {
-        number_chords();
-        symbol_chords();
-        fingerspelling_chords();
-      }
-      modifier_chords_released(bitmask);
+      number_chords();
+      symbol_chords();
+      fingerspelling_chords();
+      m_chord = m_chord & ~bitmask;
+      current_mods = compare_and_set_mods(current_mods, mod_state());
     }
     return true;
 }
@@ -451,8 +446,8 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
                              F_A,  F_O,  MO(M_LAYER),                 F_NR,  F_E,  F_U
     ),
     [M_LAYER] = LAYOUT_georgi(
-    TO(S_LAYER), UC(0x2813), KC_NO, KC_NO, KC_NO, KC_NO,                   KC_PGUP,  KC_HOME, KC_UP,   KC_END,   KC_PGDN, KC_NO,
-    KC_NO,       KC_NO, KC_NO, KC_NO, KC_NO, KC_NO,                   KC_NO,    KC_LEFT, KC_DOWN, KC_RIGHT, KC_NO,   KC_NO,
+    TO(S_LAYER), KC_NO, KC_NO, KC_NO, KC_NO, KC_NO,                   KC_PGUP,  KC_HOME, KC_UP,   KC_END,   KC_PGDN, KC_NO,
+    TO(M_LAYER), KC_NO, KC_NO, KC_NO, KC_NO, KC_NO,                   KC_NO,    KC_LEFT, KC_DOWN, KC_RIGHT, KC_NO,   KC_NO,
                                KC_NO, KC_NO, MO(M_LAYER),             KC_LCTRL, KC_LSFT, KC_NO
     )
 
