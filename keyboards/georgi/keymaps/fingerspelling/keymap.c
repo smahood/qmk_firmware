@@ -14,8 +14,9 @@ uint32_t i_chord = 0;                // Instant chord
 
 uint8_t current_mods = NOMODS;       // Stores state of current steno modifiers - could be different than what QMK sees
 uint8_t prev_layer = 0;              // Used to allow access to symbol layer from both steno and fingerspelling layers
+uint8_t curr_layer = 0;
 
-const uint32_t instant_bitmask = ST2;
+const uint32_t instant_bitmask = LNO;
 const uint32_t num_sym_bitmask = RNO;
 
 const uint32_t LSFT_BITMASK   = ST1 | LH;
@@ -33,7 +34,7 @@ enum custom_keycodes {
     F_SU, F_SD, F_TL, F_KL, F_PL,  F_WL, F_HL, F_RL, F_A, F_O,
     F_ST1, F_ST2, F_ST3, F_ST4,
     F_E, F_U, F_FR, F_RR, F_PR, F_BR, F_LR, F_GR, F_TR, F_SR, F_DR, F_ZR,
-    F_NUM, F_NUM_ON
+    F_NUM, F_NUM_ON, F_INST, F_INST_ON
   };
 
 
@@ -41,6 +42,7 @@ void SEND(uint32_t kc) {
     register_code(kc);
     unregister_code(kc);
 }
+
 
 bool chord_match(uint32_t chord, uint32_t bitmask) {
   if ((chord & bitmask) == bitmask) { return true; }
@@ -64,6 +66,7 @@ uint8_t compare_and_set_mods (uint8_t prev, uint8_t next) {
 
   return next;
 }
+
 
 void extract_modifier_code(uint32_t bitmask) {
   if (chord_match(m_chord, bitmask)) { f_chord = f_chord & ~bitmask; }
@@ -197,7 +200,7 @@ void instant_code(uint32_t kc, uint8_t mods, uint32_t bitmask, keyrecord_t *reco
     // compare_and_set_mods(starting_mods, mods);
 
     if (record->event.pressed){
-      f_chord = f_chord & ~bitmask;
+      f_chord = f_chord & ~bitmask & ~instant_bitmask;
       register_code(kc);
     }
     else {
@@ -246,7 +249,6 @@ void number_chords(void){
 
 
 void symbol_chords(void) {
-  // Uses RNO for symbols and numbers
 
   // Starts with -F
   symbol_code(KC_9, CTRL | SHFT, RF | RR | RP | RB);        // cursive - wrap ()
@@ -321,7 +323,12 @@ void instant_chords(keyrecord_t *record) {
 //       unregister_code(KC_SPC);
 //     }
 
-  instant_code(KC_SPC, NOMODS, RB, record);
+  instant_code(KC_HOME, NOMODS, RF, record);
+  instant_code(KC_LEFT, NOMODS, RR, record);
+  instant_code(KC_UP, NOMODS, RP, record);
+  instant_code(KC_DOWN, NOMODS, RB, record);
+  instant_code(KC_END, NOMODS, RL, record);
+  instant_code(KC_RIGHT, NOMODS, RG, record);
 
 }
 
@@ -443,7 +450,7 @@ bool process_fingerspelling(uint32_t bitmask, keyrecord_t *record) {
         instant_chords(record);
       }
 
-      if (chord_match(f_chord, num_sym_bitmask)) {
+      else if (chord_match(f_chord, num_sym_bitmask)) {
         number_chords();
         symbol_chords();
         f_chord = num_sym_bitmask; // Number bar stays active until physically released
@@ -463,24 +470,50 @@ bool process_fingerspelling(uint32_t bitmask, keyrecord_t *record) {
     return true;
 }
 
+void swap_layer(uint8_t prev, uint8_t next) {
+  if (prev != next) {
+    prev_layer = prev;
+    layer_on(next);
+    layer_off(prev);
+    curr_layer = next;
+  }
+}
+
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
   // There might be a much nicer way to do this, but I haven't looked at changing it yet.
    switch (keycode) {
-            case F_NUM_ON: if (record->event.pressed)  { prev_layer = S_LAYER;
-                                                        layer_on(F_LAYER);
-                                                        f_chord = f_chord | num_sym_bitmask;
-                                                      }
-                            return true;
+            case F_NUM_ON:
+              if (record->event.pressed)  {
+                prev_layer = S_LAYER;                                 // This key only occurs on the steno layer
+                swap_layer(prev_layer, F_LAYER);
+              }
+              return process_fingerspelling(num_sym_bitmask, record);
 
-            case F_NUM: if (record->event.pressed) { prev_layer = 1;
-                                                    f_chord = f_chord | num_sym_bitmask; }
-                        else  { process_fingerspelling(num_sym_bitmask, record);
-                               f_chord = f_chord & ~num_sym_bitmask;
-                               if (prev_layer == 0) { layer_off(F_LAYER); }
-                               };
-                        return true;
+            case F_NUM:
+              if (record->event.pressed) {
+                prev_layer = F_LAYER;
+                }
+              else {
+                swap_layer(curr_layer, prev_layer);
+              }
+              return process_fingerspelling(num_sym_bitmask, record);
 
+            case F_INST_ON:
+              if (record->event.pressed)  {
+                prev_layer = S_LAYER;                                 // This key only occurs on the steno layer
+                swap_layer(prev_layer, F_LAYER);
+              }
+              return process_fingerspelling(instant_bitmask, record);
+
+            case F_INST:
+              if (record->event.pressed) {
+                prev_layer = F_LAYER;
+                }
+              else {
+                swap_layer(curr_layer, prev_layer);
+              }
+              return process_fingerspelling(instant_bitmask, record);
 
             case F_SU:  return process_fingerspelling(LSU, record);
             case F_SD:  return process_fingerspelling(LSD, record);
@@ -492,8 +525,6 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             case F_RL:  return process_fingerspelling(LR,  record);
             case F_A:   return process_fingerspelling(LA,  record);
             case F_O:   return process_fingerspelling(LO,  record);
-
-
             case F_ST1: return process_fingerspelling(ST1, record);
             case F_ST2: return process_fingerspelling(ST2, record);
             case F_ST3: return process_fingerspelling(ST3, record);
@@ -525,17 +556,13 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     [S_LAYER] = LAYOUT_georgi(
     TO(F_LAYER), STN_S1,  STN_TL,  STN_PL,  STN_HL,  STN_ST1,         STN_ST3,      STN_FR,  STN_PR,  STN_LR,  STN_TR,  STN_DR,
     TO(M_LAYER), STN_S2,  STN_KL,  STN_WL,  STN_RL,  STN_ST2,         STN_ST4,      STN_RR,  STN_BR,  STN_GR,  STN_SR,  STN_ZR,
-                                   STN_A,   STN_O,   MO(M_LAYER),     F_NUM_ON,      STN_E,   STN_U
+                                   STN_A,   STN_O,   F_INST_ON,      F_NUM_ON,      STN_E,   STN_U
     ),
     [F_LAYER] = LAYOUT_georgi(
     TO(S_LAYER), F_SU, F_TL, F_PL, F_HL, F_ST1,                       F_ST3, F_FR, F_PR, F_LR, F_TR, F_DR,
     TO(M_LAYER), F_SD, F_KL, F_WL, F_RL, F_ST2,                       F_ST4, F_RR, F_BR, F_GR, F_SR, F_ZR,
-                             F_A,  F_O,  MO(M_LAYER),                 F_NUM,  F_E,  F_U
+                             F_A,  F_O,  F_INST,                      F_NUM,  F_E,  F_U
     ),
-    [M_LAYER] = LAYOUT_georgi(
-    TO(S_LAYER), KC_NO, KC_NO, KC_NO, KC_NO, KC_NO,                   KC_PGUP,  KC_HOME, KC_UP,   KC_END,   KC_PGDN, KC_NO,
-    TO(M_LAYER), KC_NO, KC_NO, KC_NO, KC_NO, KC_NO,                   KC_NO,    KC_LEFT, KC_DOWN, KC_RIGHT, KC_NO,   KC_NO,
-                               KC_NO, KC_NO, MO(M_LAYER),             KC_LCTRL, KC_LSFT, KC_LALT
-    )
+
 
 };
