@@ -4,15 +4,19 @@
 #include "process_unicode.h"
 #define IGNORE_MOD_TAP_INTERRUPT
 
-#define S_LAYER 0                    // Steno layer
-#define F_LAYER 1                    // Fingerspelling layer (includes numbers and symbols)
+#define S_LAYER 1                    // Steno layer
+#define F_LAYER 0                    // Fingerspelling layer (includes numbers and symbols)
 #define M_LAYER 2                    // Movement layer
 
 uint32_t f_chord = 0;                // Fingerspelling Chord
 uint32_t m_chord = 0;                // Modifier chord
+uint32_t i_chord = 0;                // Instant chord
 
 uint8_t current_mods = NOMODS;       // Stores state of current steno modifiers - could be different than what QMK sees
 uint8_t prev_layer = 0;              // Used to allow access to symbol layer from both steno and fingerspelling layers
+
+const uint32_t instant_bitmask = ST2;
+const uint32_t num_sym_bitmask = RNO;
 
 const uint32_t LSFT_BITMASK   = ST1 | LH;
 const uint32_t LCTRL_BITMASK  = ST1 | LP;
@@ -115,7 +119,7 @@ void f_code(uint32_t kc, uint32_t bitmask) {
 void number_code(uint32_t kc, uint32_t bitmask, bool twice) {
   // Type numbers, doesn't clear the number bar (can hold it down through multiple chords)
   // Must press the doubling key or reverse key again on each chord
-  if ((f_chord & bitmask) == bitmask) {
+  if (chord_match(f_chord, bitmask)) {
     SEND(kc);
     if (twice == true) {
       SEND(kc);
@@ -146,7 +150,7 @@ void unicode_code(uint32_t code, uint32_t bitmask) {
 void symbol_code(uint32_t kc, uint8_t mods, uint32_t bitmask) {
   // Send keycode with the desired modifiers, does not clear the number bar
   uint8_t starting_mods = current_mods;
-  if (f_chord == (RNO | bitmask)) {
+  if (chord_match(f_chord, num_sym_bitmask | bitmask)) {
     compare_and_set_mods(starting_mods, mods);
     SEND(kc);
     compare_and_set_mods(mods, starting_mods);
@@ -159,7 +163,7 @@ void symbol_code(uint32_t kc, uint8_t mods, uint32_t bitmask) {
 void symbol_code_2(uint32_t kc1, uint32_t kc2, uint8_t mods1, uint8_t mods2, uint32_t bitmask) {
   // Same as symbol_code but can specify 2 keycodes and modifier settings
   uint8_t starting_mods = current_mods;
-  if (f_chord == (RNO | bitmask)) {
+  if (chord_match(f_chord, num_sym_bitmask | bitmask)) {
     compare_and_set_mods(starting_mods, mods1);
     SEND(kc1);
     compare_and_set_mods(mods1, mods2);
@@ -174,7 +178,7 @@ void symbol_code_2(uint32_t kc1, uint32_t kc2, uint8_t mods1, uint8_t mods2, uin
 void symbol_code_3(uint32_t kc1, uint32_t kc2, uint32_t kc3, uint8_t mods1, uint8_t mods2, uint8_t mods3, uint32_t bitmask) {
   // Same as symbol_code but can specify 3 keycodes and modifier settings
   uint8_t starting_mods = current_mods;
-  if (f_chord == (RNO | bitmask)) {
+  if (chord_match(f_chord, num_sym_bitmask | bitmask)) {
     compare_and_set_mods(starting_mods, mods1);
     SEND(kc1);
     compare_and_set_mods(mods1, mods2);
@@ -187,113 +191,143 @@ void symbol_code_3(uint32_t kc1, uint32_t kc2, uint32_t kc3, uint8_t mods1, uint
     }
 }
 
+void instant_code(uint32_t kc, uint8_t mods, uint32_t bitmask, keyrecord_t *record) {
+  // uint8_t starting_mods = current_mods;
+  if (chord_match(i_chord, bitmask)) {
+    // compare_and_set_mods(starting_mods, mods);
+
+    if (record->event.pressed){
+      f_chord = f_chord & ~bitmask;
+      register_code(kc);
+    }
+    else {
+      unregister_code(kc);
+      i_chord = i_chord & ~bitmask;
+    }
+    // compare_and_set_mods(mods, starting_mods);
+
+
+    }
+}
+void number_chords(void){
+  bool twice = ((f_chord & RZ) == RZ);      // Send each digit twice if RZ is pressed
+  if ((f_chord & RD) == RD) {               // Reverse when RD is pressed
+    number_code(KC_0, LO, twice);
+    number_code(KC_0, ST2, twice);
+    number_code(KC_9, LR, twice);
+    number_code(KC_8, LW, twice);
+    number_code(KC_7, LK, twice);
+    number_code(KC_6, LSD, twice);
+    number_code(KC_5, LA, twice);
+    number_code(KC_5, ST1, twice);
+    number_code(KC_4, LH, twice);
+    number_code(KC_3, LP, twice);
+    number_code(KC_2, LFT, twice);
+    number_code(KC_1, LSU, twice);
+    f_chord = f_chord &~ RD;              // RD will have to be pressed again on next chord
+  }
+  else {
+    number_code(KC_1, LSU, twice);
+    number_code(KC_2, LFT, twice);
+    number_code(KC_3, LP, twice);
+    number_code(KC_4, LH, twice);
+    number_code(KC_5, LA, twice);
+    number_code(KC_5, ST1, twice);
+    number_code(KC_6, LSD, twice);
+    number_code(KC_7, LK, twice);
+    number_code(KC_8, LW, twice);
+    number_code(KC_9, LR, twice);
+    number_code(KC_0, ST2, twice);
+    number_code(KC_0, LO, twice);
+  }
+
+  if (twice) { f_chord = f_chord &~ RZ; } // RZ will have to be pressed again on next chord
+}
+
 
 void symbol_chords(void) {
   // Uses RNO for symbols and numbers
-  // Number bar stays active at end of function, ready for next chord
-  // Clears RZ and RD so they will have to be pressed again on next chord
-  if ((f_chord & RNO) == RNO) {
-    bool twice = ((f_chord & RZ) == RZ);      // Send each digit twice if RZ is pressed
 
-    if ((f_chord & RD) == RD) {               // Reverse when RD is pressed
-      number_code(KC_0, LO, twice);
-      number_code(KC_0, ST2, twice);
-      number_code(KC_9, LR, twice);
-      number_code(KC_8, LW, twice);
-      number_code(KC_7, LK, twice);
-      number_code(KC_6, LSD, twice);
-      number_code(KC_5, LA, twice);
-      number_code(KC_5, ST1, twice);
-      number_code(KC_4, LH, twice);
-      number_code(KC_3, LP, twice);
-      number_code(KC_2, LFT, twice);
-      number_code(KC_1, LSU, twice);
-      f_chord = f_chord &~ RD;
-    }
-    else {
-      number_code(KC_1, LSU, twice);
-      number_code(KC_2, LFT, twice);
-      number_code(KC_3, LP, twice);
-      number_code(KC_4, LH, twice);
-      number_code(KC_5, LA, twice);
-      number_code(KC_5, ST1, twice);
-      number_code(KC_6, LSD, twice);
-      number_code(KC_7, LK, twice);
-      number_code(KC_8, LW, twice);
-      number_code(KC_9, LR, twice);
-      number_code(KC_0, ST2, twice);
-      number_code(KC_0, LO, twice);
-    }
+  // Starts with -F
+  symbol_code(KC_9, CTRL | SHFT, RF | RR | RP | RB);        // cursive - wrap ()
+  symbol_code(KC_EQL, SHFT, RF | RR);                       // +
+  symbol_code(KC_7, SHFT, RF | RP | RL | RT);               // &
+  symbol_code(KC_1, SHFT, RF | RP | RL);                    // !
+  symbol_code(KC_9, SHFT, RF | RP );                        // (
+  symbol_code_2(KC_DOT, KC_MINS, NOMODS, NOMODS, RF | RL);  // .-
+  symbol_code(KC_DOT, NOMODS, RF);                          // .
 
-    if (twice) { f_chord = f_chord &~ RZ; }
+  // Starts with -R
+  symbol_code(KC_GRV, SHFT, RR | RP | RL | RT);             // ~
+  symbol_code(KC_SLSH, SHFT, RR | RP | RL);                 // ?
+  symbol_code(KC_6, SHFT, RR | RP | RG);                    // ^
+  symbol_code(KC_SLSH, NOMODS, RR | RP);                    // /
+  symbol_code(KC_4, SHFT, RR | RB | RG | RS);               // $
+  symbol_code(KC_2, SHFT, RR | RB | RG);                    // @
+  symbol_code(KC_0, SHFT, RR | RB);                         // )
+  symbol_code(KC_COMM, NOMODS, RR);                         // ,
 
-    // Starts with -F
-    symbol_code(KC_9, CTRL | SHFT, RNO | RF | RR | RP | RB);        // cursive - wrap ()
-    symbol_code(KC_EQL, SHFT, RNO | RF | RR);                       // +
-    symbol_code(KC_7, SHFT, RNO | RF | RP | RL | RT);               // &
-    symbol_code(KC_1, SHFT, RNO | RF | RP | RL);                    // !
+  // Starts with -P
+  symbol_code(KC_LBRC, CTRL, RP | RB | RL | RG);            // cursive - wrap []
+  symbol_code(KC_8, SHFT, RP | RB);                         // *
+  symbol_code(KC_3, SHFT, RP | RL | RT);                    // #
+  symbol_code(KC_LBRC, NOMODS, RP | RL);                    // [
+  symbol_code(KC_BSLS, SHFT, RP | RG | RS);                 // |
+  symbol_code(KC_BSLS, NOMODS, RP | RG);                    // backslash
+  symbol_code(KC_SCLN, SHFT, RP);                           // :
 
-    symbol_code(KC_9, SHFT, RNO | RF | RP );                        // (
-    symbol_code_2(KC_DOT, KC_MINS, NOMODS, NOMODS, RNO | RF | RL);  // .-
-    symbol_code(KC_DOT, NOMODS, RNO | RF);                          // .
+  // Starts with -B
+  symbol_code(KC_5, SHFT, RB | RG | RS);                    // %
+  symbol_code(KC_RBRC, NOMODS, RB | RG);                    // ]
+  symbol_code(KC_SCLN, NOMODS, RB);                         // ;
 
+  // Starts with -L
+  symbol_code(KC_LBRC, CTRL | SHFT, RL | RG | RT | RS);     // cursive - wrap {}
+  symbol_code(KC_EQL, NOMODS, RL | RG);                     // =
+  symbol_code_2(KC_MINS, KC_DOT, NOMODS, SHFT, RL | RT | RD);  // ->
+  symbol_code(KC_LBRC, SHFT, RL | RT);                      // {
+  symbol_code(KC_GRV, NOMODS, RL | RS);                     // `
+  symbol_code(KC_MINS, NOMODS, RL);                         // -
 
-    // Starts with -R
-    symbol_code(KC_GRV, SHFT, RNO | RR | RP | RL | RT);             // ~
-    symbol_code(KC_SLSH, SHFT, RNO | RR | RP | RL);                 // ?
-    symbol_code(KC_6, SHFT, RNO | RR | RP | RG);                    // ^
-    symbol_code(KC_SLSH, NOMODS, RNO | RR | RP);                    // /
-    symbol_code(KC_4, SHFT, RNO | RR | RB | RG | RS);               // $
-    symbol_code(KC_2, SHFT, RNO | RR | RB | RG);                    // @
-    symbol_code(KC_0, SHFT, RNO | RR | RB);                         // )
-    symbol_code(KC_COMM, NOMODS, RNO | RR);                         // ,
+  // Starts with -G
+  symbol_code_3(KC_MINS, KC_DOT, KC_DOT, NOMODS, SHFT, SHFT, RG | RS | RZ);    // ->>
+  symbol_code(KC_RBRC, SHFT, RG | RS);                      // }
+  symbol_code(KC_MINS, SHFT, RG);                           // _
 
-    // Starts with -P
-    symbol_code(KC_LBRC, CTRL, RNO | RP | RB | RL | RG);            // cursive - wrap []
-    symbol_code(KC_8, SHFT, RNO | RP | RB);                         // *
-    symbol_code(KC_LBRC, NOMODS, RNO | RP | RL);                    // [
-    symbol_code(KC_3, SHFT, RNO | RP | RL | RT);                    // #
-    symbol_code(KC_BSLS, SHFT, RNO | RP | RG | RS);                 // |
-    symbol_code(KC_BSLS, NOMODS, RNO | RP | RG);                    // backslash
-    symbol_code(KC_SCLN, SHFT, RNO | RP);                           // :
+  // Starts with -T
+  symbol_code(KC_QUOT, CTRL | SHFT, RT | RS);               // cursive - wrap ""
+  symbol_code(KC_COMM, SHFT, RT | RD);                      // <
+  symbol_code(KC_QUOT, SHFT, RT);                           // "
+
+  // Starts with -S
+  symbol_code(KC_DOT, SHFT, RS | RZ);                       // >
+  symbol_code(KC_QUOT, NOMODS, RS);                         // '
+
+  // Starts with -D
+  symbol_code(KC_GRV, NOMODS, RD);                          // '
+
+  // Starts with -Z
+  symbol_code(KC_GRV, SHFT, RZ);                            // ~
+}
 
 
-    // Starts with -B
-    symbol_code(KC_5, SHFT, RNO | RB | RG | RS);                    // %
-    symbol_code(KC_RBRC, NOMODS, RNO | RB | RG);                    // ]
-    symbol_code(KC_COMM, NOMODS, RNO | RB);                         // ,
+void instant_chords(keyrecord_t *record) {
+  // These register on keydown, unregister on keyup
+  // Useful for keys that you can hold down - arrows, space, enter etc.
+//  if (record->event.pressed){
+//       register_code(KC_SPC);
+//     }
+//     else {
+//       unregister_code(KC_SPC);
+//     }
 
-    // Starts with -L
-    symbol_code(KC_LBRC, CTRL | SHFT, RNO | RL | RG | RT | RS);     // cursive - wrap {}
-    symbol_code(KC_EQL, NOMODS, RNO | RL | RG);                     // =
-    symbol_code_2(KC_MINS, KC_DOT, NOMODS, SHFT, RNO | RL | RT | RD);  // ->
-    symbol_code(KC_LBRC, SHFT, RNO | RL | RT);                      // {
-    symbol_code(KC_GRV, NOMODS, RNO | RL | RS);                     // `
-    symbol_code(KC_MINS, NOMODS, RNO | RL);                         // -
+  instant_code(KC_SPC, NOMODS, RB, record);
 
-
-
-    // Starts with -G
-    symbol_code_3(KC_MINS, KC_DOT, KC_DOT, NOMODS, SHFT, SHFT, RNO | RG | RS | RZ);    // ->>
-    symbol_code(KC_RBRC, SHFT, RNO | RG | RS);                      // }
-    symbol_code(KC_MINS, SHFT, RNO | RG);                           // _
-
-    // Starts with -T
-    symbol_code(KC_QUOT, CTRL | SHFT, RNO | RT | RS);               // cursive - wrap ""
-    symbol_code(KC_COMM, SHFT, RNO | RT | RD);                      // <
-    symbol_code(KC_QUOT, SHFT, RNO | RT);                           // "
-
-    // Starts with -S
-    symbol_code(KC_DOT, SHFT, RNO | RS | RZ);                       // >
-    symbol_code(KC_QUOT, NOMODS, RNO | RS);                         // '
-
-    f_chord = RNO;
-  }
 }
 
 
 void fingerspelling_chords(void){
-  // This fuction checks for all the standard fingerspelling rules in Steno Order
+  // This function checks for all the standard fingerspelling rules in Steno Order
   // The chords will combine together based on non-conflicting rules
   // So `snowballs` could be stroked `SPHO/W-B/A-L/-LS`
   // The only active chord on the right side is `-PB` to write `n`
@@ -389,27 +423,41 @@ bool process_fingerspelling(uint32_t bitmask, keyrecord_t *record) {
       // The modifier chord can have extra keys active without a problem
       f_chord = f_chord | bitmask;
       m_chord = m_chord | bitmask;
+      i_chord = i_chord | bitmask;
 
       // If the bitmasks in the fingerspelling match modifier chords,
       // clear them from the fingerspelling chord to prevent double processing.
       // These need to match those in mod_state
       extract_modifier_chords();
 
-      // Activate the current modifier state
-      current_mods = compare_and_set_mods(current_mods, mod_state());
+      current_mods = compare_and_set_mods(current_mods, mod_state());   // Activate the current modifier state
+
+      if(chord_match(i_chord,  instant_bitmask)){
+        instant_chords(record);
+      }
     }
     else {
       // If the symbols are active, fingerspelling chords should not do anything
       // Can probably add an if statement here (left out in case I want to change something)
-      symbol_chords();
-      fingerspelling_chords();
-      // Clear released key from the modifier chords
-      m_chord = m_chord & ~bitmask;
+      if(chord_match(i_chord,  instant_bitmask)){
+        instant_chords(record);
+      }
+
+      if (chord_match(f_chord, num_sym_bitmask)) {
+        number_chords();
+        symbol_chords();
+        f_chord = num_sym_bitmask; // Number bar stays active until physically released
+      }
+      else {
+        fingerspelling_chords();
+      }
+      i_chord = i_chord & ~bitmask;
+      m_chord = m_chord & ~bitmask;   // Clear released key from the modifier chords
+
       // Refresh the current modifiers after firing other chords
       // Expected behavior: When releasing modifier keys, fire all chords and change
       //                    modifier state. When releasing non-modifier keys, fire all
       //                    chords and leave modifier state the same.
-
       current_mods = compare_and_set_mods(current_mods, mod_state());
     }
     return true;
@@ -419,29 +467,16 @@ bool process_fingerspelling(uint32_t bitmask, keyrecord_t *record) {
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
   // There might be a much nicer way to do this, but I haven't looked at changing it yet.
    switch (keycode) {
-            // case KC_LSFT: if (record->event.pressed) { current_mods = current_mods | SHFT; }
-            //               else  { current_mods = current_mods & ~SHFT; };
-            //               return true;
-            // case KC_LCTL: if (record->event.pressed) { current_mods = current_mods | CTRL; }
-            //               else  { current_mods = current_mods & ~CTRL; };
-            //               return true;
-            // case KC_LALT: if (record->event.pressed) { current_mods = current_mods | ALT; }
-            //               else  { current_mods = current_mods & ~ALT; };
-            //               return true;
-            // case KC_LWIN: if (record->event.pressed) { current_mods = current_mods | SUPER; }
-            //               else  { current_mods = current_mods & ~SUPER; };
-            //               return true;
-
             case F_NUM_ON: if (record->event.pressed)  { prev_layer = S_LAYER;
                                                         layer_on(F_LAYER);
-                                                        f_chord = f_chord | RNO;
+                                                        f_chord = f_chord | num_sym_bitmask;
                                                       }
                             return true;
 
             case F_NUM: if (record->event.pressed) { prev_layer = 1;
-                                                    f_chord = f_chord | RNO; }
-                        else  { process_fingerspelling(RNO, record);
-                               f_chord = f_chord & ~RNO;
+                                                    f_chord = f_chord | num_sym_bitmask; }
+                        else  { process_fingerspelling(num_sym_bitmask, record);
+                               f_chord = f_chord & ~num_sym_bitmask;
                                if (prev_layer == 0) { layer_off(F_LAYER); }
                                };
                         return true;
