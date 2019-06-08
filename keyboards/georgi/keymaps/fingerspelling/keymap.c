@@ -154,6 +154,35 @@ uint8_t mod_state(void) {
  //      Instant Chords      //
 //////////////////////////////
 
+void movement_code(uint32_t kc, uint32_t bitmask, keyrecord_t *record) {
+  if (chord_match(i_chord, bitmask)) {
+    int repeat = 1;
+
+    if (chord_match(i_chord, LFT)) { repeat = 2; }
+    else if (chord_match(i_chord, LP)) { repeat = 3; }
+    else if (chord_match(i_chord, LH)) { repeat = 4; }
+    else if (chord_match(i_chord, ST1)) { repeat = 5; }
+    else if (chord_match(i_chord, LSD)) { repeat = 6; }
+    else if (chord_match(i_chord, LK)) { repeat = 7; }
+    else if (chord_match(i_chord, LW)) { repeat = 8; }
+    else if (chord_match(i_chord, LR)) { repeat = 9; }
+    else if (chord_match(i_chord, ST2)) { repeat = 10; }
+
+    if (record->event.pressed){
+      f_chord = f_chord & ~bitmask & ~instant_bitmask;
+      for(int i = 1; i < repeat; i++) { 
+        SEND(kc);
+      }
+      register_code(kc);
+    }
+    else {
+      unregister_code(kc);
+      i_chord = i_chord & ~bitmask; 
+    }
+  }
+}
+
+
 void instant_code(uint32_t kc, uint8_t mods, uint32_t bitmask, keyrecord_t *record) {
   uint8_t starting_mods = current_mods;
   if (chord_match(i_chord, bitmask)) {
@@ -181,15 +210,15 @@ void instant_chords(uint32_t bitmask, keyrecord_t *record) {
   instant_code(KC_BSPC, NOMODS, LK | LW, record); 
   
   instant_code(KC_ENT, NOMODS, LP | LH, record); 
-  instant_code(KC_TAB, NOMODS, LP | LR, record); 
+  instant_code(KC_TAB, NOMODS, LP | LR, record);
   instant_code(KC_SPC, NOMODS, LW | LR, record); 
 
   instant_code(KC_HOME, NOMODS, RF, record);
-  instant_code(KC_LEFT, NOMODS, RR, record);
-  instant_code(KC_UP, NOMODS, RP, record);
-  instant_code(KC_DOWN, NOMODS, RB, record);
-  instant_code(KC_END, NOMODS, RL, record);
-  instant_code(KC_RIGHT, NOMODS, RG, record);
+  movement_code(KC_LEFT, RR, record);
+  movement_code(KC_UP, RP, record);
+  movement_code(KC_DOWN, RB, record);
+  movement_code(KC_END, RL, record);
+  movement_code(KC_RIGHT, RG, record);
 
 }
 
