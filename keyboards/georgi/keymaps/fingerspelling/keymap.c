@@ -101,7 +101,6 @@ void swap_layer(uint8_t prev, uint8_t next) {
     prev_layer = prev;
     layer_on(next);
     layer_off(prev);
-    curr_layer = next;
   }
 }
 
@@ -117,7 +116,7 @@ void extract_modifier_code(uint32_t bitmask) {
 
 void extract_modifier_chords(void) {
   // Checks and then moves matching chords from the fingerspelling chord to the modifier chords
-  extract_modifier_code(LSFT_BITMASK);
+  extract_modifier_code(ST1 | LH);
   extract_modifier_code(LCTRL_BITMASK);
   extract_modifier_code(LALT_BITMASK);
   extract_modifier_code(LSUPER_BITMASK);
@@ -138,7 +137,7 @@ uint8_t mod_code(uint32_t bitmask, uint8_t modifier, uint8_t state) {
 uint8_t mod_state(void) {
   // Returns the modifier state based on the current modifier chord
   uint8_t state = NOMODS;
-  state = mod_code(LSFT_BITMASK, SHFT, state);
+  state = mod_code(ST1 | LH, SHFT, state);
   state = mod_code(LCTRL_BITMASK, CTRL, state);
   state = mod_code(LALT_BITMASK, ALT, state);
   state = mod_code(LSUPER_BITMASK, SUPER, state);
@@ -156,9 +155,9 @@ uint8_t mod_state(void) {
 //////////////////////////////
 
 void instant_code(uint32_t kc, uint8_t mods, uint32_t bitmask, keyrecord_t *record) {
-  // uint8_t starting_mods = current_mods;
+  uint8_t starting_mods = current_mods;
   if (chord_match(i_chord, bitmask)) {
-    // compare_and_set_mods(starting_mods, mods);
+    compare_and_set_mods(starting_mods, mods);
 
     if (record->event.pressed){
       f_chord = f_chord & ~bitmask & ~instant_bitmask;
@@ -168,7 +167,7 @@ void instant_code(uint32_t kc, uint8_t mods, uint32_t bitmask, keyrecord_t *reco
       unregister_code(kc);
       i_chord = i_chord & ~bitmask;
     }
-    // compare_and_set_mods(mods, starting_mods);
+    compare_and_set_mods(mods, starting_mods);
     }
 }
 
@@ -176,12 +175,22 @@ void instant_code(uint32_t kc, uint8_t mods, uint32_t bitmask, keyrecord_t *reco
 void instant_chords(uint32_t bitmask, keyrecord_t *record) {
   // These register on keydown, unregister on keyup
   // Useful for keys that you can hold down - arrows, space, enter etc.
+  
+  instant_code(KC_ESC, NOMODS, LFT | LP, record); 
+  instant_code(KC_DEL, NOMODS, LK | LP, record); 
+  instant_code(KC_BSPC, NOMODS, LK | LW, record); 
+  
+  instant_code(KC_ENT, NOMODS, LP | LH, record); 
+  instant_code(KC_TAB, NOMODS, LP | LR, record); 
+  instant_code(KC_SPC, NOMODS, LW | LR, record); 
+
   instant_code(KC_HOME, NOMODS, RF, record);
   instant_code(KC_LEFT, NOMODS, RR, record);
   instant_code(KC_UP, NOMODS, RP, record);
   instant_code(KC_DOWN, NOMODS, RB, record);
   instant_code(KC_END, NOMODS, RL, record);
   instant_code(KC_RIGHT, NOMODS, RG, record);
+
 }
 
 
@@ -594,7 +603,7 @@ uint32_t convert_to_bitmask(uint16_t keycode) {
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
   // There might be a much nicer way to do this, but I haven't looked at changing it yet.
-  curr_layer = biton32(layer_state);
+  uint8_t curr_layer = biton32(layer_state);
 
   switch (keycode) {
     case F_LNO : case F_RNO:
@@ -613,8 +622,9 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     // Pass chords to Plover when on steno layer
     return true;
   }
-
-  return process_chord(convert_to_bitmask(keycode), record);
+  else {
+    return process_chord(convert_to_bitmask(keycode), record);
+  }  
 }
 
 
