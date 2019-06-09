@@ -7,8 +7,8 @@
 #define S_LAYER 1                    // Steno layer
 #define F_LAYER 0                    // Fingerspelling layer (includes numbers and symbols)
 
+
 uint32_t chord   = 0;                // Full Chord
-uint32_t m_chord = 0;                // Modifier chord
 uint32_t i_chord = 0;                // Instant chord
 uint32_t f_chord = 0;                // Fingerspelling Chord
 uint32_t plover_chord = 0;           // Store steno keypresses to prevent plover from outputting in edge cases
@@ -48,7 +48,7 @@ enum custom_keycodes {
 //////////////////////////////
 
 
-void SEND(uint32_t kc) {
+void send_keycode(uint32_t kc) {
     register_code(kc);
     unregister_code(kc);
 }
@@ -60,19 +60,25 @@ bool chord_match(uint32_t chord, uint32_t bitmask) {
 }
 
 
+void extract_code(uint32_t bitmask) {
+  // Remove chord from further processing
+  if (chord_match(chord, bitmask)) { f_chord = f_chord & ~bitmask; }
+}
+
+
 void unicode_code(uint32_t code, uint32_t bitmask) {
   // This is specific to Linux with IBus according to https://beta.docs.qmk.fm/features/feature_unicode#input-modes
   // There is a more standard way to output this but I couldn't get it to work
   if ((f_chord & bitmask) == bitmask) {
       register_code(KC_LCTL);
       register_code(KC_LSFT);
-      SEND(KC_U);
+      send_keycode(KC_U);
       unregister_code(KC_LSFT);
       unregister_code(KC_LCTL);
 
       register_hex(code);
 
-      SEND(KC_ENT);
+      send_keycode(KC_ENT);
       f_chord = f_chord & ~bitmask;
       }
 }
@@ -109,27 +115,11 @@ void swap_layer(uint8_t prev, uint8_t next) {
  //         Modifiers        //
 //////////////////////////////
 
-void extract_modifier_code(uint32_t bitmask) {
-  if (chord_match(m_chord, bitmask)) { f_chord = f_chord & ~bitmask; }
-}
-
-
-void extract_modifier_chords(void) {
-  // Checks and then moves matching chords from the fingerspelling chord to the modifier chords
-  extract_modifier_code(ST1 | LH);
-  extract_modifier_code(LCTRL_BITMASK);
-  extract_modifier_code(LALT_BITMASK);
-  extract_modifier_code(LSUPER_BITMASK);
-  extract_modifier_code(RSFT_BITMASK);
-  extract_modifier_code(RCTRL_BITMASK);
-  extract_modifier_code(RALT_BITMASK);
-  extract_modifier_code(RSUPER_BITMASK);
-}
-
-
 uint8_t mod_code(uint32_t bitmask, uint8_t modifier, uint8_t state) {
   // Checks to see if the modifier state needs to change and returns the new modifier state.
-  if (chord_match(m_chord, bitmask)) { state = state | modifier; }
+  if (chord_match(chord, bitmask)) { 
+    state = state | modifier; 
+    extract_code(bitmask);}
   return state;
 }
 
@@ -137,7 +127,7 @@ uint8_t mod_code(uint32_t bitmask, uint8_t modifier, uint8_t state) {
 uint8_t mod_state(void) {
   // Returns the modifier state based on the current modifier chord
   uint8_t state = NOMODS;
-  state = mod_code(ST1 | LH, SHFT, state);
+  state = mod_code(LSFT_BITMASK, SHFT, state);
   state = mod_code(LCTRL_BITMASK, CTRL, state);
   state = mod_code(LALT_BITMASK, ALT, state);
   state = mod_code(LSUPER_BITMASK, SUPER, state);
@@ -147,6 +137,11 @@ uint8_t mod_state(void) {
   state = mod_code(RALT_BITMASK, ALT, state);
   state = mod_code(RSUPER_BITMASK, SUPER, state);
   return state;
+}
+
+
+void process_mods(void) {
+  current_mods = compare_and_set_mods(current_mods, mod_state());   // Activate the current modifier state     
 }
 
 
@@ -171,7 +166,7 @@ void movement_code(uint32_t kc, uint32_t bitmask, keyrecord_t *record) {
     if (record->event.pressed){
       f_chord = f_chord & ~bitmask & ~instant_bitmask;
       for(int i = 1; i < repeat; i++) { 
-        SEND(kc);
+        send_keycode(kc);
       }
       register_code(kc);
     }
@@ -248,7 +243,7 @@ void symbol_code(uint32_t kc, uint8_t mods, uint32_t bitmask) {
   uint8_t starting_mods = current_mods;
   if (chord_match(f_chord, symbol_bitmask | bitmask)) {
     compare_and_set_mods(starting_mods, mods);
-    SEND(kc);
+    send_keycode(kc);
     compare_and_set_mods(mods, starting_mods);
 
     f_chord = f_chord & ~bitmask;
@@ -261,9 +256,9 @@ void symbol_code_2(uint32_t kc1, uint32_t kc2, uint8_t mods1, uint8_t mods2, uin
   uint8_t starting_mods = current_mods;
   if (chord_match(f_chord, symbol_bitmask | bitmask)) {
     compare_and_set_mods(starting_mods, mods1);
-    SEND(kc1);
+    send_keycode(kc1);
     compare_and_set_mods(mods1, mods2);
-    SEND(kc2);
+    send_keycode(kc2);
     compare_and_set_mods(mods2, starting_mods);
 
     f_chord = f_chord & ~bitmask;
@@ -276,11 +271,11 @@ void symbol_code_3(uint32_t kc1, uint32_t kc2, uint32_t kc3, uint8_t mods1, uint
   uint8_t starting_mods = current_mods;
   if (chord_match(f_chord, symbol_bitmask | bitmask)) {
     compare_and_set_mods(starting_mods, mods1);
-    SEND(kc1);
+    send_keycode(kc1);
     compare_and_set_mods(mods1, mods2);
-    SEND(kc2);
+    send_keycode(kc2);
     compare_and_set_mods(mods2, mods3);
-    SEND(kc3);
+    send_keycode(kc3);
     compare_and_set_mods(mods3, starting_mods);
 
     f_chord = f_chord & ~bitmask;
@@ -374,9 +369,9 @@ void number_code(uint32_t kc, uint32_t bitmask, bool twice) {
   // Doesn't clear the number bar until released
   // Must press the doubling key or reverse key again on each chord
   if (chord_match(f_chord, bitmask)) {
-    SEND(kc);
+    send_keycode(kc);
     if (twice == true) {
-      SEND(kc);
+      send_keycode(kc);
     }
     f_chord &= ~bitmask;
   }
@@ -446,7 +441,7 @@ void f_code(uint32_t kc, uint32_t bitmask) {
   // Used for all normal keypresses in fingerspelling mode
   // Clears keys from chord once used
     if (chord_match(f_chord, bitmask)) {
-        SEND(kc);
+        send_keycode(kc);
         f_chord = f_chord & ~bitmask;
       }
 }
@@ -558,15 +553,13 @@ bool process_chord(uint32_t bitmask, keyrecord_t *record) {
       // Add pressed key to chords
       chord = chord | bitmask;      // This should reflect the current full chord
       f_chord = f_chord | bitmask;
-      m_chord = m_chord | bitmask;
       i_chord = i_chord | bitmask;
 
-      current_mods = compare_and_set_mods(current_mods, mod_state());   // Activate the current modifier state
+      process_mods();
 
       if(chord_match(i_chord,  instant_bitmask)){
         process_instant(bitmask, record);
       }
-      extract_modifier_chords();
   }
 
   else {
@@ -582,15 +575,14 @@ bool process_chord(uint32_t bitmask, keyrecord_t *record) {
       else {
         process_fingerspelling(bitmask, record);
       }
+      chord &= ~bitmask;            // Clear released key from the modifier chords
 
       i_chord = i_chord & ~bitmask;
-      m_chord = m_chord & ~bitmask;   // Clear released key from the modifier chords
-
       // Refresh the current modifiers after firing other chords
       // Expected behavior: When releasing modifier keys, fire all chords and change
       //                    modifier state. When releasing non-modifier keys, fire all
       //                    chords and leave modifier state the same.
-      current_mods = compare_and_set_mods(current_mods, mod_state());
+      process_mods();
     }
     return true;
 }
@@ -623,8 +615,8 @@ uint32_t convert_to_bitmask(uint16_t keycode) {
     case F_SR:  case STN_SR:  return RS;
     case F_DR:  case STN_DR:  return RD;
     case F_ZR:  case STN_ZR:  return RZ;
-    case F_LNO:               return instant_bitmask;
-    case F_RNO:               return number_bitmask;
+    case F_LNO:               return LNO;
+    case F_RNO:               return RNO;
   }
   return 0;
 }
@@ -670,10 +662,10 @@ bool process_steno_user(uint16_t keycode, keyrecord_t *record)
     plover_chord &= ~convert_to_bitmask(keycode);
 
     // if (interrupt_steno) {
-    //   SEND(KC_3);
+    //   send_keycode(KC_3);
     //   return false;
     //   }
-    // else { SEND(KC_2);
+    // else { send_keycode(KC_2);
     // return true;}
   }
   return true;
