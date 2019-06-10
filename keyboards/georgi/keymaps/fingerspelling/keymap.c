@@ -18,21 +18,12 @@ uint8_t prev_layer = 0;              // Used to allow access to symbol layer fro
 
 // bool interrupt_steno = false;        // Used to prevent plover from outputting anything in edge cases
 
-const uint32_t instant_bitmask         = LNO;
-const uint32_t symbol_bitmask          = RNO;   // Symbols and numbers share same layer
-const uint32_t number_bitmask          = RNO;   // Can probably be separated, I haven't tried yet
-const uint32_t number_reverse_bitmask  = RD;
-const uint32_t number_doubling_bitmask = RZ;
+bool rno_used = false;              // If RNO pressed and released, send SPC
 
-const uint32_t LSFT_BITMASK   = ST1 | LH;
-const uint32_t LCTRL_BITMASK  = ST1 | LP;
-const uint32_t LALT_BITMASK   = ST1 | LFT;
-const uint32_t LSUPER_BITMASK = ST1 | LSU;
+const uint32_t movement_bitmask        = LNO;
+const uint32_t number_bitmask          = RNO;   // Symbols and numbers share same layer
+const uint32_t number_reverse_bitmask  = RE;
 
-const uint32_t RSFT_BITMASK   = ST3 | RF;
-const uint32_t RCTRL_BITMASK  = ST3 | RP;
-const uint32_t RALT_BITMASK   = ST3 | RL;
-const uint32_t RSUPER_BITMASK = ST3 | RT;
 
 enum custom_keycodes {
   PLACEHOLDER = SAFE_RANGE,  F_FN, F_PWR,
@@ -117,8 +108,9 @@ void swap_layer(uint8_t prev, uint8_t next) {
 
 uint8_t mod_code(uint32_t bitmask, uint8_t modifier, uint8_t state) {
   // Checks to see if the modifier state needs to change and returns the new modifier state.
-  if (chord_match(chord, bitmask)) { 
-    state = state | modifier; 
+  // Removes any matching chords from f_chord
+  if (chord_match(chord, bitmask)) {
+    state = state | modifier;
     extract_code(bitmask);}
   return state;
 }
@@ -126,142 +118,148 @@ uint8_t mod_code(uint32_t bitmask, uint8_t modifier, uint8_t state) {
 
 uint8_t mod_state(void) {
   // Returns the modifier state based on the current modifier chord
-  uint8_t state = NOMODS;
-  state = mod_code(LSFT_BITMASK, SHFT, state);
-  state = mod_code(LCTRL_BITMASK, CTRL, state);
-  state = mod_code(LALT_BITMASK, ALT, state);
-  state = mod_code(LSUPER_BITMASK, SUPER, state);
 
-  state = mod_code(RSFT_BITMASK, SHFT, state);
-  state = mod_code(RCTRL_BITMASK, CTRL, state);
-  state = mod_code(RALT_BITMASK, ALT, state);
-  state = mod_code(RSUPER_BITMASK, SUPER, state);
+  uint8_t state = NOMODS;
+  state = mod_code(LNO | LR,  SHFT,  state);
+  state = mod_code(LNO | LW,  CTRL,  state);
+  state = mod_code(LNO | LK,  ALT,   state);
+  state = mod_code(LNO | LSD, SUPER, state);
+  state = mod_code(ST4 | RR, SHFT, state);
+  state = mod_code(ST4 | RB, CTRL, state);
+  state = mod_code(ST4 | RG, ALT, state);
+  state = mod_code(ST4 | RS, SUPER, state);
   return state;
 }
 
 
 void process_mods(void) {
-  current_mods = compare_and_set_mods(current_mods, mod_state());   // Activate the current modifier state     
+  current_mods = compare_and_set_mods(current_mods, mod_state());   // Activate the current modifier state
+}
+
+  //////////////////////////////
+ //     Movement Chords      //
+//////////////////////////////
+
+uint32_t movement_code(uint32_t c, uint32_t kc, uint8_t mods, uint32_t bitmask) {
+  uint8_t starting_mods = current_mods;
+  if (chord_match(c, bitmask)) {
+    int repeat = 0;
+    compare_and_set_mods(starting_mods, mods);
+    if (chord_match(c, LSU)) { repeat += 1; }
+    if (chord_match(c, LFT)) { repeat += 2; }
+    if (chord_match(c, LP))  { repeat += 3; }
+    if (chord_match(c, LH))  { repeat += 4; }
+
+    for(int i = 1; i < repeat; i++) {
+      send_keycode(kc);
+    }
+    send_keycode(kc);
+    compare_and_set_mods(mods, starting_mods);
+    return c & ~bitmask;
+  }
+  else {
+    return c;
+  }
+}
+
+uint32_t movement_chords(uint32_t c,uint32_t bitmask) {
+  c = movement_code(c, KC_ENT, current_mods, RNO | RE);
+  c = movement_code(c, KC_SPC, current_mods, RNO);
+  c = movement_code(c, KC_ENT, current_mods, RE);
+  c = movement_code(c, KC_TAB, current_mods, RU);
+
+  c = movement_code(c, KC_PGUP, NOMODS,   RF | RP | RL);
+  c = movement_code(c, KC_PGDN, NOMODS,   RR | RB | RG);
+
+  c = movement_code(c, KC_HOME, NOMODS,   RF);
+  c = movement_code(c, KC_END, NOMODS,    RL);
+  c = movement_code(c, KC_LEFT, current_mods,   RR);
+  c = movement_code(c, KC_UP, current_mods,     RP);
+  c = movement_code(c, KC_DOWN, current_mods,   RB);
+  c = movement_code(c, KC_RIGHT, current_mods,  RG);
+
+  return c;
+}
+
+uint32_t process_movement(uint32_t c, uint32_t bitmask) {
+  uint32_t m_chords = c;
+  return movement_chords(m_chords, bitmask);
 }
 
 
   //////////////////////////////
- //      Instant Chords      //
+ //    Numbers & Symbols     //
 //////////////////////////////
 
-void movement_code(uint32_t kc, uint32_t bitmask, keyrecord_t *record) {
-  if (chord_match(i_chord, bitmask)) {
-    int repeat = 1;
-
-    if (chord_match(i_chord, LFT)) { repeat = 2; }
-    else if (chord_match(i_chord, LP)) { repeat = 3; }
-    else if (chord_match(i_chord, LH)) { repeat = 4; }
-    else if (chord_match(i_chord, ST1)) { repeat = 5; }
-    else if (chord_match(i_chord, LSD)) { repeat = 6; }
-    else if (chord_match(i_chord, LK)) { repeat = 7; }
-    else if (chord_match(i_chord, LW)) { repeat = 8; }
-    else if (chord_match(i_chord, LR)) { repeat = 9; }
-    else if (chord_match(i_chord, ST2)) { repeat = 10; }
-
-    if (record->event.pressed){
-      f_chord = f_chord & ~bitmask & ~instant_bitmask;
-      for(int i = 1; i < repeat; i++) { 
-        send_keycode(kc);
-      }
-      register_code(kc);
-    }
-    else {
-      unregister_code(kc);
-      i_chord = i_chord & ~bitmask; 
-    }
+void number_code(uint32_t kc, uint32_t bitmask) {
+  // Doesn't clear the number bar until released
+  // Must press the doubling key or reverse key again on each chord
+  if (chord_match(f_chord, bitmask)) {
+    send_keycode(kc);
+    rno_used = true;
+    f_chord &= ~bitmask;
   }
 }
 
 
-void instant_code(uint32_t kc, uint8_t mods, uint32_t bitmask, keyrecord_t *record) {
-  uint8_t starting_mods = current_mods;
-  if (chord_match(i_chord, bitmask)) {
-    compare_and_set_mods(starting_mods, mods);
+void number_chords(void){
+  if (chord_match(f_chord, number_reverse_bitmask)) {               // Reverse number order
+    number_code(KC_0, LO);
+    number_code(KC_9, LR);
+    number_code(KC_8, LW);
+    number_code(KC_7, LK);
+    number_code(KC_6, LSD);
+    number_code(KC_5, LA);
+    number_code(KC_4, LH);
+    number_code(KC_3, LP);
+    number_code(KC_2, LFT);
+    number_code(KC_1, LSU);
+    if (rno_used) {
+      f_chord &= ~number_reverse_bitmask;              // Reverse is only active for a single chord
+    }
 
-    if (record->event.pressed){
-      f_chord = f_chord & ~bitmask & ~instant_bitmask;
-      register_code(kc);
-    }
-    else {
-      unregister_code(kc);
-      i_chord = i_chord & ~bitmask;
-    }
-    compare_and_set_mods(mods, starting_mods);
-    }
+  }
+  else {
+    number_code(KC_1, LSU);
+    number_code(KC_2, LFT);
+    number_code(KC_3, LP);
+    number_code(KC_4, LH);
+    number_code(KC_5, LA);
+    number_code(KC_6, LSD);
+    number_code(KC_7, LK);
+    number_code(KC_8, LW);
+    number_code(KC_9, LR);
+    number_code(KC_0, LO);
+  }
 }
 
-
-void instant_chords(uint32_t bitmask, keyrecord_t *record) {
-  // These register on keydown, unregister on keyup
-  // Useful for keys that you can hold down - arrows, space, enter etc.
-  
-  instant_code(KC_ESC, NOMODS, LFT | LP, record); 
-  instant_code(KC_DEL, NOMODS, LK | LP, record); 
-  instant_code(KC_BSPC, NOMODS, LK | LW, record); 
-  
-  instant_code(KC_ENT, NOMODS, LP | LH, record); 
-  instant_code(KC_TAB, NOMODS, LP | LR, record);
-  instant_code(KC_SPC, NOMODS, LW | LR, record); 
-
-  instant_code(KC_HOME, NOMODS, RF, record);
-  movement_code(KC_LEFT, RR, record);
-  movement_code(KC_UP, RP, record);
-  movement_code(KC_DOWN, RB, record);
-  movement_code(KC_END, RL, record);
-  movement_code(KC_RIGHT, RG, record);
-
-}
-
-
-bool process_instant(uint32_t bitmask, keyrecord_t *record) {
-    if (record->event.pressed) {
-      i_chord |= bitmask;
-      if(chord_match(i_chord,  instant_bitmask)){
-        instant_chords(bitmask, record);
-      }
-    }
-    else {
-      if(chord_match(i_chord,  instant_bitmask)){
-        instant_chords(bitmask, record);
-      }
-    }
-    return true;
-}
-
-
-  //////////////////////////////
- //         Symbols          //
-//////////////////////////////
 
 void symbol_code(uint32_t kc, uint8_t mods, uint32_t bitmask) {
   // Send keycode with the desired modifiers, does not clear the number bar
   uint8_t starting_mods = current_mods;
-  if (chord_match(f_chord, symbol_bitmask | bitmask)) {
+  if (chord_match(f_chord, number_bitmask | bitmask)) {
     compare_and_set_mods(starting_mods, mods);
     send_keycode(kc);
     compare_and_set_mods(mods, starting_mods);
 
-    f_chord = f_chord & ~bitmask;
-    }
+    f_chord &= ~bitmask;
+    rno_used = true;
+  }
 }
 
 
 void symbol_code_2(uint32_t kc1, uint32_t kc2, uint8_t mods1, uint8_t mods2, uint32_t bitmask) {
   // Same as symbol_code but can specify 2 keycodes and modifier settings
   uint8_t starting_mods = current_mods;
-  if (chord_match(f_chord, symbol_bitmask | bitmask)) {
+  if (chord_match(f_chord, number_bitmask | bitmask)) {
     compare_and_set_mods(starting_mods, mods1);
     send_keycode(kc1);
     compare_and_set_mods(mods1, mods2);
     send_keycode(kc2);
     compare_and_set_mods(mods2, starting_mods);
 
-    f_chord = f_chord & ~bitmask;
+    f_chord &= ~bitmask;
+    rno_used = true;
     }
 }
 
@@ -269,7 +267,7 @@ void symbol_code_2(uint32_t kc1, uint32_t kc2, uint8_t mods1, uint8_t mods2, uin
 void symbol_code_3(uint32_t kc1, uint32_t kc2, uint32_t kc3, uint8_t mods1, uint8_t mods2, uint8_t mods3, uint32_t bitmask) {
   // Same as symbol_code but can specify 3 keycodes and modifier settings
   uint8_t starting_mods = current_mods;
-  if (chord_match(f_chord, symbol_bitmask | bitmask)) {
+  if (chord_match(f_chord, number_bitmask | bitmask)) {
     compare_and_set_mods(starting_mods, mods1);
     send_keycode(kc1);
     compare_and_set_mods(mods1, mods2);
@@ -278,11 +276,27 @@ void symbol_code_3(uint32_t kc1, uint32_t kc2, uint32_t kc3, uint8_t mods1, uint
     send_keycode(kc3);
     compare_and_set_mods(mods3, starting_mods);
 
-    f_chord = f_chord & ~bitmask;
+    f_chord &= ~bitmask;
+    rno_used = true;
     }
 }
 
 void symbol_chords(void) {
+  // Start with ST1
+  symbol_code(KC_ESC, current_mods, ST1);                   // ESC
+
+  // Start with ST2
+  symbol_code(KC_DEL, current_mods, ST2);                   // DELETE
+
+  // Start with ST3
+  symbol_code(KC_BSPC, current_mods, ST3);                   // BACKSPACE
+
+  // Start with ST4
+  symbol_code(KC_BSPC, current_mods, ST4);                   // BACKSPACE
+
+  // Starts with -E
+  symbol_code(KC_ENT, current_mods, RE);                    // ENTER
+
   // Starts with -F
   symbol_code(KC_9, CTRL | SHFT, RF | RR | RP | RB);        // cursive - wrap ()
   symbol_code(KC_EQL, SHFT, RF | RR);                       // +
@@ -338,80 +352,14 @@ void symbol_chords(void) {
   symbol_code(KC_DOT, SHFT, RS | RZ);                       // >
   symbol_code(KC_QUOT, NOMODS, RS);                         // '
 
-  // Starts with -D
-  symbol_code(KC_GRV, NOMODS, RD);                          // '
+  // // Starts with -D
+  // symbol_code(KC_BSPC, current_mods, RD);                   // BACKSPACE
 
-  // Starts with -Z
-  symbol_code(KC_GRV, SHFT, RZ);                            // ~
-}
-
-bool process_symbols(uint32_t bitmask, keyrecord_t *record) {
-    if (record->event.pressed) {
-      return true;
-    }
-    else {
-      if (chord_match(f_chord, symbol_bitmask))
-      {
-        symbol_chords();
-      }
-      if ((bitmask == symbol_bitmask)) {
-        f_chord &= ~bitmask;
-      }
-    }
-    return true;
-}
-
-  //////////////////////////////
- //         Numbers          //
-//////////////////////////////
-
-void number_code(uint32_t kc, uint32_t bitmask, bool twice) {
-  // Doesn't clear the number bar until released
-  // Must press the doubling key or reverse key again on each chord
-  if (chord_match(f_chord, bitmask)) {
-    send_keycode(kc);
-    if (twice == true) {
-      send_keycode(kc);
-    }
-    f_chord &= ~bitmask;
-  }
+  // // Starts with -Z
+  // symbol_code(KC_DEL, current_mods, RZ);                    // DELETE
 }
 
 
-void number_chords(void){
-  bool twice = chord_match(f_chord, number_doubling_bitmask);      // Send each digit twice
-  if (chord_match(f_chord, number_reverse_bitmask)) {               // Reverse number order
-    number_code(KC_0, LO, twice);
-    number_code(KC_0, ST2, twice);
-    number_code(KC_9, LR, twice);
-    number_code(KC_8, LW, twice);
-    number_code(KC_7, LK, twice);
-    number_code(KC_6, LSD, twice);
-    number_code(KC_5, LA, twice);
-    number_code(KC_5, ST1, twice);
-    number_code(KC_4, LH, twice);
-    number_code(KC_3, LP, twice);
-    number_code(KC_2, LFT, twice);
-    number_code(KC_1, LSU, twice);
-    f_chord &= ~number_reverse_bitmask;              // Reverse is only active for a single chord
-  }
-  else {
-    number_code(KC_1, LSU, twice);
-    number_code(KC_2, LFT, twice);
-    number_code(KC_3, LP, twice);
-    number_code(KC_4, LH, twice);
-    number_code(KC_5, LA, twice);
-    number_code(KC_5, ST1, twice);
-    number_code(KC_6, LSD, twice);
-    number_code(KC_7, LK, twice);
-    number_code(KC_8, LW, twice);
-    number_code(KC_9, LR, twice);
-    number_code(KC_0, ST2, twice);
-    number_code(KC_0, LO, twice);
-  }
-
-  if (twice) { f_chord &= ~number_doubling_bitmask; } // Doubling is only active for single chord
-}
 
 bool process_numbers(uint32_t bitmask, keyrecord_t *record) {
     if (record->event.pressed) {
@@ -421,15 +369,23 @@ bool process_numbers(uint32_t bitmask, keyrecord_t *record) {
       if (chord_match(f_chord, number_bitmask))
       {
         number_chords();
+        symbol_chords();
       }
-      if ((bitmask == number_bitmask) ||
-          (bitmask == number_doubling_bitmask) ||
-          (bitmask == number_reverse_bitmask)) {
-        f_chord &= ~bitmask;
+    if (bitmask == number_reverse_bitmask) {
+          f_chord &= ~bitmask;
+      }
+
+    if (bitmask == number_bitmask) {
+      if (rno_used == false){
+        send_keycode(KC_SPC);
+      }
+
+      f_chord &= ~bitmask;
       }
     }
     return true;
 }
+
 
 
   //////////////////////////////
@@ -498,6 +454,18 @@ void fingerspelling_chords(void){
   // Start with O
   f_code(KC_O, LO);
 
+  // Start with ST1
+  f_code(KC_ESC, ST1);
+
+  // Start with ST2
+  f_code(KC_DEL, ST2);
+
+  // Start with ST3
+  f_code(KC_BSPC, ST3);
+
+  // Start with ST4
+  f_code(KC_BSPC, ST4);
+
   // Start with E
   f_code(KC_I, RE | RU);
   f_code(KC_E, RE);
@@ -551,33 +519,28 @@ bool process_fingerspelling(uint32_t bitmask, keyrecord_t *record) {
 bool process_chord(uint32_t bitmask, keyrecord_t *record) {
   if (record->event.pressed) {
       // Add pressed key to chords
-      chord = chord | bitmask;      // This should reflect the current full chord
-      f_chord = f_chord | bitmask;
-      i_chord = i_chord | bitmask;
+      chord   |= bitmask;      // This should reflect the current full chord
+      f_chord = chord;
+
+      if (bitmask == RNO) {
+        rno_used = false;
+      }
 
       process_mods();
-
-      if(chord_match(i_chord,  instant_bitmask)){
-        process_instant(bitmask, record);
-      }
   }
 
   else {
-      // If the symbols are active, fingerspelling chords should not do anything
-      if(chord_match(i_chord,  instant_bitmask)) {
-        process_instant(bitmask, record);
+      if(chord_match(chord, movement_bitmask)){
+        f_chord = process_movement(f_chord, bitmask);
       }
-      else if ((chord_match(f_chord, number_bitmask)) ||
-               (chord_match(f_chord, symbol_bitmask))) {
+      else if (chord_match(f_chord, number_bitmask)) {
         process_numbers(bitmask, record);
-        process_symbols(bitmask, record);
       }
       else {
         process_fingerspelling(bitmask, record);
       }
       chord &= ~bitmask;            // Clear released key from the modifier chords
 
-      i_chord = i_chord & ~bitmask;
       // Refresh the current modifiers after firing other chords
       // Expected behavior: When releasing modifier keys, fire all chords and change
       //                    modifier state. When releasing non-modifier keys, fire all
@@ -586,6 +549,7 @@ bool process_chord(uint32_t bitmask, keyrecord_t *record) {
     }
     return true;
 }
+
 
 uint32_t convert_to_bitmask(uint16_t keycode) {
   switch(keycode) {
@@ -627,13 +591,24 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
   uint8_t curr_layer = biton32(layer_state);
 
   switch (keycode) {
-    case F_LNO : case F_RNO:
+    case F_LNO :
       if (record->event.pressed) {
         prev_layer = curr_layer;
         swap_layer(prev_layer, F_LAYER);
         }
       else {
-        chord |= plover_chord;
+        // chord |= plover_chord;
+        swap_layer(curr_layer, prev_layer);
+      }
+      return process_chord(convert_to_bitmask(keycode), record);
+
+    case F_RNO:
+      if (record->event.pressed) {
+        prev_layer = curr_layer;
+        swap_layer(prev_layer, F_LAYER);
+        }
+      else {
+        // chord |= plover_chord;
         swap_layer(curr_layer, prev_layer);
       }
     return process_chord(convert_to_bitmask(keycode), record);
@@ -645,7 +620,7 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
   }
   else {
     return process_chord(convert_to_bitmask(keycode), record);
-  }  
+  }
 }
 
 
@@ -679,15 +654,14 @@ void matrix_scan_user(void) {
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     // Main layer, everything goes through here
     [S_LAYER] = LAYOUT_georgi(
-    TO(F_LAYER), STN_S1, STN_TL, STN_PL, STN_HL, STN_ST1,         STN_ST3,  STN_FR, STN_PR, STN_LR, STN_TR, STN_DR,
-    KC_NO      , STN_S2, STN_KL, STN_WL, STN_RL, STN_ST2,         STN_ST4,  STN_RR, STN_BR, STN_GR, STN_SR, STN_ZR,
-                                 STN_A,  STN_O,  F_LNO,       F_RNO, STN_E,  STN_U
+    KC_ESC     , STN_S1, STN_TL, STN_PL, STN_HL, STN_ST1,         STN_ST3,  STN_FR, STN_PR, STN_LR, STN_TR, STN_DR,
+    TO(F_LAYER), STN_S2, STN_KL, STN_WL, STN_RL, STN_ST2,         STN_ST4,  STN_RR, STN_BR, STN_GR, STN_SR, STN_ZR,
+                                 STN_A,  STN_O,  F_LNO,           F_RNO, STN_E,  STN_U
     ),
     [F_LAYER] = LAYOUT_georgi(
-    TO(S_LAYER), F_SU,   F_TL,   F_PL,   F_HL,   F_ST1,           F_ST3,    F_FR,   F_PR,   F_LR,   F_TR,   F_DR,
-    KC_NO      , F_SD,   F_KL,   F_WL,   F_RL,   F_ST2,           F_ST4,    F_RR,   F_BR,   F_GR,   F_SR,   F_ZR,
-                                  F_A,   F_O,    F_LNO,          F_RNO,    F_E,    F_U
+    KC_ESC     , F_SU,   F_TL,   F_PL,   F_HL,   F_ST1,           F_ST3,    F_FR,   F_PR,   F_LR,   F_TR,   F_DR,
+    TO(S_LAYER), F_SD,   F_KL,   F_WL,   F_RL,   F_ST2,           F_ST4,    F_RR,   F_BR,   F_GR,   F_SR,   F_ZR,
+                                  F_A,   F_O,    F_LNO,           F_RNO,    F_E,    F_U
     ),
-
 
 };
