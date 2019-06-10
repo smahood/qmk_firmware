@@ -140,11 +140,9 @@ void process_mods(void) {
  //     Movement Chords      //
 //////////////////////////////
 
-uint32_t movement_code(uint32_t c, uint32_t kc, uint8_t mods, uint32_t bitmask) {
-  uint8_t starting_mods = current_mods;
+uint32_t movement_code(uint32_t c, uint32_t kc, uint32_t bitmask) {
   if (chord_match(c, bitmask)) {
     int repeat = 0;
-    compare_and_set_mods(starting_mods, mods);
     if (chord_match(c, LSU)) { repeat += 1; }
     if (chord_match(c, LFT)) { repeat += 2; }
     if (chord_match(c, LP))  { repeat += 3; }
@@ -154,7 +152,6 @@ uint32_t movement_code(uint32_t c, uint32_t kc, uint8_t mods, uint32_t bitmask) 
       send_keycode(kc);
     }
     send_keycode(kc);
-    compare_and_set_mods(mods, starting_mods);
     return c & ~bitmask;
   }
   else {
@@ -163,20 +160,20 @@ uint32_t movement_code(uint32_t c, uint32_t kc, uint8_t mods, uint32_t bitmask) 
 }
 
 uint32_t movement_chords(uint32_t c,uint32_t bitmask) {
-  c = movement_code(c, KC_ENT, current_mods, RNO | RE);
-  c = movement_code(c, KC_SPC, current_mods, RNO);
-  c = movement_code(c, KC_ENT, current_mods, RE);
-  c = movement_code(c, KC_TAB, current_mods, RU);
+  c = movement_code(c, KC_ENT,    RNO | RE);
+  c = movement_code(c, KC_SPC,    RNO);
+  c = movement_code(c, KC_ENT,    RE);
+  c = movement_code(c, KC_TAB,    RU);
 
-  c = movement_code(c, KC_PGUP, NOMODS,   RF | RP | RL);
-  c = movement_code(c, KC_PGDN, NOMODS,   RR | RB | RG);
+  c = movement_code(c, KC_PGUP,   RF | RP | RL);
+  c = movement_code(c, KC_PGDN,   RR | RB | RG);
 
-  c = movement_code(c, KC_HOME, NOMODS,   RF);
-  c = movement_code(c, KC_END, NOMODS,    RL);
-  c = movement_code(c, KC_LEFT, current_mods,   RR);
-  c = movement_code(c, KC_UP, current_mods,     RP);
-  c = movement_code(c, KC_DOWN, current_mods,   RB);
-  c = movement_code(c, KC_RIGHT, current_mods,  RG);
+  c = movement_code(c, KC_HOME,   RF);
+  c = movement_code(c, KC_END,    RL);
+  c = movement_code(c, KC_LEFT,   RR);
+  c = movement_code(c, KC_UP,     RP);
+  c = movement_code(c, KC_DOWN,   RB);
+  c = movement_code(c, KC_RIGHT,  RG);
 
   return c;
 }
@@ -283,16 +280,20 @@ void symbol_code_3(uint32_t kc1, uint32_t kc2, uint32_t kc3, uint8_t mods1, uint
 
 void symbol_chords(void) {
   // Start with ST1
-  symbol_code(KC_ESC, current_mods, ST1);                   // ESC
+  symbol_code(KC_DEL, current_mods, ST1 | ST2);
+  symbol_code(KC_BSPC, current_mods, ST1);
+
 
   // Start with ST2
-  symbol_code(KC_DEL, current_mods, ST2);                   // DELETE
+  symbol_code(KC_BSPC, current_mods, ST2);
 
   // Start with ST3
-  symbol_code(KC_BSPC, current_mods, ST3);                   // BACKSPACE
+  symbol_code(KC_DEL, current_mods, ST3 | ST4);
+  symbol_code(KC_BSPC, current_mods, ST3);
+
 
   // Start with ST4
-  symbol_code(KC_BSPC, current_mods, ST4);                   // BACKSPACE
+  symbol_code(KC_BSPC, current_mods, ST4);
 
   // Starts with -E
   symbol_code(KC_ENT, current_mods, RE);                    // ENTER
@@ -455,13 +456,17 @@ void fingerspelling_chords(void){
   f_code(KC_O, LO);
 
   // Start with ST1
-  f_code(KC_ESC, ST1);
+  f_code(KC_DEL, ST1 | ST2);
+  f_code(KC_BSPC, ST1);
+
 
   // Start with ST2
-  f_code(KC_DEL, ST2);
+  f_code(KC_BSPC, ST2);
 
   // Start with ST3
+  f_code(KC_DEL, ST3 | ST4);
   f_code(KC_BSPC, ST3);
+
 
   // Start with ST4
   f_code(KC_BSPC, ST4);
