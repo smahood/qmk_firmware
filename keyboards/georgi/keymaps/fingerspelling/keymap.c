@@ -18,9 +18,12 @@ uint8_t prev_layer = 0;              // Used to allow access to symbol layer fro
 
 // bool interrupt_steno = false;        // Used to prevent plover from outputting anything in edge cases
 
-bool rno_used = false;              // If RNO pressed and released, send SPC
+bool lno_used = false;              // If LNO pressed and released, send ENTER
+bool rno_used = false;              // If RNO pressed and released, send SPACE
+
 
 const uint32_t movement_bitmask        = LNO;
+
 const uint32_t number_bitmask          = RNO;   // Symbols and numbers share same layer
 const uint32_t number_reverse_bitmask  = RE;
 
@@ -152,6 +155,7 @@ uint32_t movement_code(uint32_t c, uint32_t kc, uint32_t bitmask) {
       send_keycode(kc);
     }
     send_keycode(kc);
+    lno_used = true;
     return c & ~bitmask;
   }
   else {
@@ -180,7 +184,13 @@ uint32_t movement_chords(uint32_t c,uint32_t bitmask) {
 
 uint32_t process_movement(uint32_t c, uint32_t bitmask) {
   uint32_t m_chords = c;
-  return movement_chords(m_chords, bitmask);
+  m_chords = movement_chords(m_chords, bitmask);
+  if (bitmask == movement_bitmask) {
+    if (lno_used == false) {
+      send_keycode(KC_ENT);
+    }
+  }
+   return m_chords;
 }
 
 
@@ -529,6 +539,9 @@ bool process_chord(uint32_t bitmask, keyrecord_t *record) {
 
       if (bitmask == RNO) {
         rno_used = false;
+      }
+      if (bitmask == LNO) {
+        lno_used = false;
       }
 
       process_mods();
