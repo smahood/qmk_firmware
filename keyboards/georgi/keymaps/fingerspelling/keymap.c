@@ -42,6 +42,41 @@ enum custom_keycodes {
 //////////////////////////////
 
 
+uint32_t convert_to_bitmask(uint16_t keycode) {
+  switch(keycode) {
+    case F_SU:  case STN_S1:  return LSU;
+    case F_SD:  case STN_S2:  return LSD;
+    case F_TL:  case STN_TL:  return LFT;
+    case F_KL:  case STN_KL:  return LK;
+    case F_PL:  case STN_PL:  return LP;
+    case F_WL:  case STN_WL:  return LW;
+    case F_HL:  case STN_HL:  return LH;
+    case F_RL:  case STN_RL:  return LR;
+    case F_A:   case STN_A:   return LA;
+    case F_O:   case STN_O:   return LO;
+    case F_ST1: case STN_ST1: return ST1;
+    case F_ST2: case STN_ST2: return ST2;
+    case F_ST3: case STN_ST3: return ST3;
+    case F_ST4: case STN_ST4: return ST4;
+    case F_E:   case STN_E:   return RE;
+    case F_U:   case STN_U:   return RU;
+    case F_FR:  case STN_FR:  return RF;
+    case F_RR:  case STN_RR:  return RR;
+    case F_PR:  case STN_PR:  return RP;
+    case F_BR:  case STN_BR:  return RB;
+    case F_LR:  case STN_LR:  return RL;
+    case F_GR:  case STN_GR:  return RG;
+    case F_TR:  case STN_TR:  return RT;
+    case F_SR:  case STN_SR:  return RS;
+    case F_DR:  case STN_DR:  return RD;
+    case F_ZR:  case STN_ZR:  return RZ;
+    case F_LNO:               return LNO;
+    case F_RNO:               return RNO;
+  }
+  return 0;
+}
+
+
 void send_keycode(uint32_t kc) {
     register_code(kc);
     unregister_code(kc);
@@ -50,8 +85,64 @@ void send_keycode(uint32_t kc) {
 
 bool chord_match(uint32_t chord, uint32_t bitmask) {
   if ((chord & bitmask) == bitmask) { return true; }
-  else { return false; }
-}
+  else { return false; }}
+
+// void send_plover_chord(uint32_t c){
+//   if (chord_match(LSU, c) ) {register_code16(STN_S1); }
+//   if (chord_match(LSD, c) ) {register_code16(STN_S2); }
+//   if (chord_match(LFT, c) ) {register_code16(STN_TL); }
+//   if (chord_match(LK, c) ) {register_code16(STN_KL); }
+//   if (chord_match(LP, c) ) {register_code16(STN_PL); }
+//   if (chord_match(LW, c) ) {register_code16(STN_WL); }
+//   if (chord_match(LH, c) ) {register_code16(STN_HL); }
+//   if (chord_match(LR, c) ) {register_code16(STN_RL); }
+//   if (chord_match(LA, c) ) {register_code16(STN_A); }
+//   if (chord_match(LO, c) ) {register_code16(STN_O); }
+//   if (chord_match(ST1, c) ) {register_code16(STN_ST1); }
+//   if (chord_match(ST2, c) ) {register_code16(STN_ST2); }
+//   if (chord_match(ST3, c) ) {register_code16(STN_ST3); }
+//   if (chord_match(ST4, c) ) {register_code16(STN_ST4); }
+//   if (chord_match(RE, c) ) {register_code16(STN_E); }
+//   if (chord_match(RU, c) ) {register_code16(STN_U); }
+//   if (chord_match(RF, c) ) {register_code16(STN_FR); }
+//   if (chord_match(RR, c) ) {register_code16(STN_RR); }
+//   if (chord_match(RP, c) ) {register_code16(STN_PR); }
+//   if (chord_match(RB, c) ) {register_code16(STN_BR); }
+//   if (chord_match(RL, c) ) {register_code16(STN_LR); }
+//   if (chord_match(RG, c) ) {register_code16(STN_GR); }
+//   if (chord_match(RT, c) ) {register_code16(STN_TR); }
+//   if (chord_match(RS, c) ) {register_code16(STN_SR); }
+//   if (chord_match(RD, c) ) {register_code16(STN_DR); }
+//   if (chord_match(RZ, c) ) {register_code16(STN_ZR); }
+
+//   if (chord_match(LSU, c) ) {unregister_code16(STN_S1); }
+//   if (chord_match(LSD, c) ) {unregister_code16(STN_S2); }
+//   if (chord_match(LFT, c) ) {unregister_code16(STN_TL); }
+//   if (chord_match(LK, c) ) {unregister_code16(STN_KL); }
+//   if (chord_match(LP, c) ) {unregister_code16(STN_PL); }
+//   if (chord_match(LW, c) ) {unregister_code16(STN_WL); }
+//   if (chord_match(LH, c) ) {unregister_code16(STN_HL); }
+//   if (chord_match(LR, c) ) {unregister_code16(STN_RL); }
+//   if (chord_match(LA, c) ) {unregister_code16(STN_A); }
+//   if (chord_match(LO, c) ) {unregister_code16(STN_O); }
+//   if (chord_match(ST1, c) ) {unregister_code16(STN_ST1); }
+//   if (chord_match(ST2, c) ) {unregister_code16(STN_ST2); }
+//   if (chord_match(ST3, c) ) {unregister_code16(STN_ST3); }
+//   if (chord_match(ST4, c) ) {unregister_code16(STN_ST4); }
+//   if (chord_match(RE, c) ) {unregister_code16(STN_E); }
+//   if (chord_match(RU, c) ) {unregister_code16(STN_U); }
+//   if (chord_match(RF, c) ) {unregister_code16(STN_FR); }
+//   if (chord_match(RR, c) ) {unregister_code16(STN_RR); }
+//   if (chord_match(RP, c) ) {unregister_code16(STN_PR); }
+//   if (chord_match(RB, c) ) {unregister_code16(STN_BR); }
+//   if (chord_match(RL, c) ) {unregister_code16(STN_LR); }
+//   if (chord_match(RG, c) ) {unregister_code16(STN_GR); }
+//   if (chord_match(RT, c) ) {unregister_code16(STN_TR); }
+//   if (chord_match(RS, c) ) {unregister_code16(STN_SR); }
+//   if (chord_match(RD, c) ) {unregister_code16(STN_DR); }
+//   if (chord_match(RZ, c) ) {unregister_code16(STN_ZR); }
+// }
+
 
 
 void extract_code(uint32_t bitmask) {
@@ -408,7 +499,23 @@ void f_code(uint32_t kc, uint32_t bitmask) {
   // Used for all normal keypresses in fingerspelling mode
   // Clears keys from chord once used
     if (chord_match(f_chord, bitmask)) {
+        // register_code16(STN_ST1);
+        // send_plover_chord(bitmask);
+        // unregister_code16(STN_ST1);
         send_keycode(kc);
+        f_chord = f_chord & ~bitmask;
+      }
+}
+
+void f_code_2(uint32_t kc1, uint32_t kc2, uint32_t bitmask) {
+  // Used for all normal keypresses in fingerspelling mode
+  // Clears keys from chord once used
+    if (chord_match(f_chord, bitmask)) {
+        // register_code16(STN_ST1);
+        // send_plover_chord(bitmask);
+        // unregister_code16(STN_ST1);
+        send_keycode(kc1);
+        send_keycode(kc2);
         f_chord = f_chord & ~bitmask;
       }
 }
@@ -489,16 +596,22 @@ void fingerspelling_chords(void){
   f_code(KC_U, RU);
 
   // Start with F
+  f_code_2(KC_R, KC_V, RF | RR | RB);
+  f_code_2(KC_C, KC_H, RF | RP);
   f_code(KC_F, RF);
 
   // Start with -R
+  f_code_2(KC_S, KC_H, RR | RB);
   f_code(KC_R, RR);
 
   // Start with -P
+  f_code(KC_J, RP | RB | RL | RG);
   f_code(KC_N, RP | RB);
+  f_code(KC_M, RP | RL);
   f_code(KC_P, RP);
 
   // Start with B
+  f_code(KC_K, RB | RG);
   f_code(KC_B, RB);
 
   // Start with L
@@ -569,39 +682,6 @@ bool process_chord(uint32_t bitmask, keyrecord_t *record) {
 }
 
 
-uint32_t convert_to_bitmask(uint16_t keycode) {
-  switch(keycode) {
-    case F_SU:  case STN_S1:  return LSU;
-    case F_SD:  case STN_S2:  return LSD;
-    case F_TL:  case STN_TL:  return LFT;
-    case F_KL:  case STN_KL:  return LK;
-    case F_PL:  case STN_PL:  return LP;
-    case F_WL:  case STN_WL:  return LW;
-    case F_HL:  case STN_HL:  return LH;
-    case F_RL:  case STN_RL:  return LR;
-    case F_A:   case STN_A:   return LA;
-    case F_O:   case STN_O:   return LO;
-    case F_ST1: case STN_ST1: return ST1;
-    case F_ST2: case STN_ST2: return ST2;
-    case F_ST3: case STN_ST3: return ST3;
-    case F_ST4: case STN_ST4: return ST4;
-    case F_E:   case STN_E:   return RE;
-    case F_U:   case STN_U:   return RU;
-    case F_FR:  case STN_FR:  return RF;
-    case F_RR:  case STN_RR:  return RR;
-    case F_PR:  case STN_PR:  return RP;
-    case F_BR:  case STN_BR:  return RB;
-    case F_LR:  case STN_LR:  return RL;
-    case F_GR:  case STN_GR:  return RG;
-    case F_TR:  case STN_TR:  return RT;
-    case F_SR:  case STN_SR:  return RS;
-    case F_DR:  case STN_DR:  return RD;
-    case F_ZR:  case STN_ZR:  return RZ;
-    case F_LNO:               return LNO;
-    case F_RNO:               return RNO;
-  }
-  return 0;
-}
 
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
@@ -648,19 +728,19 @@ bool process_steno_user(uint16_t keycode, keyrecord_t *record)
   // layer is switched after pressing a plover key down
   // So far I can get it to stop, but can't get it to ever turn back on again
 
-  if (record->event.pressed) {
-    plover_chord |= convert_to_bitmask(keycode);
-  }
-  else {
-    plover_chord &= ~convert_to_bitmask(keycode);
+  // if (record->event.pressed) {
+  //   plover_chord |= convert_to_bitmask(keycode);
+  // }
+  // else {
+  //   plover_chord &= ~convert_to_bitmask(keycode);
 
-    // if (interrupt_steno) {
-    //   send_keycode(KC_3);
-    //   return false;
-    //   }
-    // else { send_keycode(KC_2);
-    // return true;}
-  }
+  //   // if (interrupt_steno) {
+  //   //   send_keycode(KC_3);
+  //   //   return false;
+  //   //   }
+  //   // else { send_keycode(KC_2);
+  //   // return true;}
+  // }
   return true;
 }
 
