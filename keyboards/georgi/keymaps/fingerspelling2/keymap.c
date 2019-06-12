@@ -180,14 +180,14 @@ void process_mods(void) {
 
 uint32_t movement_code(uint32_t c, uint32_t kc, uint8_t mods, keyrecord_t *record, uint32_t bitmask) {
   uint32_t rc = c;
-  if (chord_match(rc, bitmask)) {
+  if (rc == (bitmask | movement_bitmask)) {
     if (record->event.pressed) {
-      compare_and_set_mods(current_mods, mods);
-      register_code(kc);
-      movement_active = true;
+
     }
     else {
-      unregister_code(kc);
+      movement_active = true;
+      compare_and_set_mods(current_mods, mods);
+      send_keycode(kc);
       compare_and_set_mods(mods, current_mods);
     }
     rc &= ~bitmask;
@@ -199,7 +199,7 @@ uint32_t movement_code(uint32_t c, uint32_t kc, uint8_t mods, keyrecord_t *recor
 }
 
 uint32_t movement_chords(uint32_t c, keyrecord_t *record,  uint32_t bitmask) {
-  uint32_t rc = c;
+  // uint32_t rc = c;
   // c = movement_code(c, KC_ENT, current_mods, record, RNO | RE);
   // c = movement_code(c, KC_SPC, current_mods, record,   RNO);
   // c = movement_code(c, KC_ENT, current_mods, record,   RE);
@@ -208,14 +208,14 @@ uint32_t movement_chords(uint32_t c, keyrecord_t *record,  uint32_t bitmask) {
   // c = movement_code(c, KC_PGUP,  current_mods, record, RF | RP | RL);
   // c = movement_code(c, KC_PGDN,  current_mods, record,  RR | RB | RG);
 
-  // c = movement_code(c, KC_HOME,  current_mods, record,  RF);
-  // c = movement_code(c, KC_END,  current_mods, record,   RL);
-  rc = movement_code(rc, KC_LEFT,  current_mods, record, RR);
-  rc = movement_code(rc, KC_UP,    current_mods, record, RP);
-  rc = movement_code(rc, KC_DOWN,  current_mods, record, RB);
-  rc = movement_code(rc, KC_RIGHT, current_mods, record, RG);
+  c = movement_code(c, KC_HOME,  current_mods, record, RF | RP | RL);
+  c = movement_code(c, KC_END,   current_mods, record, RR | RB | RG);
+  c = movement_code(c, KC_LEFT,  current_mods, record, RR);
+  c = movement_code(c, KC_UP,    current_mods, record, RP);
+  c = movement_code(c, KC_DOWN,  current_mods, record, RB);
+  c = movement_code(c, KC_RIGHT, current_mods, record, RG);
 
-  return rc;
+  return c;
 }
 
 uint32_t process_movement(uint32_t c, keyrecord_t *record, uint32_t bitmask) {
@@ -226,8 +226,8 @@ uint32_t process_movement(uint32_t c, keyrecord_t *record, uint32_t bitmask) {
   else {
     rc = movement_chords(c, record, bitmask);
     if (movement_active && ((movement_bitmask & bitmask) > 0)) {
-      rc &= ~movement_bitmask;
       movement_active = false;
+      rc &= ~movement_bitmask;
     }
   }
   return rc;
@@ -615,16 +615,16 @@ bool process_chord(uint32_t bitmask, keyrecord_t *record) {
     if (chord_match(chord, movement_bitmask)){
       f_chord = process_movement(chord, record, bitmask);
     }
-    else {
-      if (chord_match(f_chord, number_bitmask)) {
-        process_numbers(bitmask, record);
-      }
-      else {
+
+    if (!movement_active) {
+      // if (chord_match(f_chord, number_bitmask)) {
+      //   process_numbers(bitmask, record);
+      // }
+      // else {
         process_fingerspelling(bitmask, record);
-      }
+        chord &= ~movement_bitmask;
+      // }
     }
-
-
     chord &= ~bitmask;            // Clear released key from the modifier chords
 
     // Refresh the current modifiers after firing other chords
