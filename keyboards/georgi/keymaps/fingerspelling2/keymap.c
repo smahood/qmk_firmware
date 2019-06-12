@@ -617,13 +617,13 @@ bool process_chord(uint32_t bitmask, keyrecord_t *record) {
     }
 
     if (!movement_active) {
-      // if (chord_match(f_chord, number_bitmask)) {
-      //   process_numbers(bitmask, record);
-      // }
-      // else {
+      if (chord_match(f_chord, number_bitmask)) {
+        process_numbers(bitmask, record);
+      }
+      else {
         process_fingerspelling(bitmask, record);
         chord &= ~movement_bitmask;
-      // }
+      }
     }
     chord &= ~bitmask;            // Clear released key from the modifier chords
 
